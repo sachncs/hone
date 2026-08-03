@@ -21,7 +21,7 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def fake_datasets_module(value: Any) -> types.ModuleType:
+def fake_datasets_module(value: Any) -> Any:
     """Return a synthetic `datasets` module whose `load_dataset` returns `value`.
 
     Each call to `load_dataset` returns a fresh iterator so multiple
@@ -31,7 +31,7 @@ def fake_datasets_module(value: Any) -> types.ModuleType:
     is returned as-is.
     """
     rows: list[Any] = list(value) if not isinstance(value, list) else value
-    module = types.ModuleType("datasets")
+    module: Any = types.ModuleType("datasets")
 
     def load(*args: Any, **kwargs: Any) -> Any:
         return value if isinstance(value, dict) else iter(rows)
