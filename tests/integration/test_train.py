@@ -19,6 +19,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from hone.cli import app
@@ -168,4 +169,4 @@ def test_train_all_help_runs() -> None:
     """The all subcommand must be registered and parseable."""
     result = runner.invoke(app, ["train", "all", "--help"])
     assert result.exit_code == 0
-    assert "--model" in result.stdout
+    assert "--model" in unstyle(result.stdout)
