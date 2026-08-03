@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
@@ -17,6 +20,18 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def fake_datasets_module(value: Any) -> types.ModuleType:
+    """Return a synthetic `datasets` module whose `load_dataset` returns `value`."""
+    module = types.ModuleType("datasets")
+    module.load_dataset = lambda *args, **kwargs: value  # type: ignore[attr-defined]
+    sys.modules["datasets"] = module
+    return module
+
+
+def unfake_datasets_module() -> None:
+    sys.modules.pop("datasets", None)
 
 
 def make_chat_row(q: str = "Q", a: str = "A", row_id: int = 0) -> dict[str, Any]:
@@ -162,15 +177,14 @@ def test_prepare_swe_refuses_test_split() -> None:
 
 
 def test_prepare_swe_filters_by_max_chars(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock, patch
-
     fake_dataset = MagicMock()
     fake_dataset.__iter__ = lambda self: iter(
         [
             {"instance_id": "i1", "problem_statement": "p", "patch": "x"},
         ]
     )
-    with patch("datasets.load_dataset", return_value=fake_dataset):
+    fake_datasets_module(value=fake_dataset)
+    try:
         result = runner.invoke(
             app,
             [
@@ -184,16 +198,16 @@ def test_prepare_swe_filters_by_max_chars(tmp_path: Path) -> None:
                 str(tmp_path / "out"),
             ],
         )
-    assert result.exit_code != 0
-    assert (
-        "not enough valid SWE examples" in result.output
-        or "not enough valid SWE examples" in (result.stderr or "")
-    )
+        assert result.exit_code != 0
+        assert (
+            "not enough valid SWE examples" in result.output
+            or "not enough valid SWE examples" in (result.stderr or "")
+        )
+    finally:
+        unfake_datasets_module()
 
 
 def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock, patch
-
     fake_row = {
         "language": "PYTHON",
         "description": "x" * 200,
@@ -201,8 +215,8 @@ def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> Non
     }
     fake_dataset = MagicMock()
     fake_dataset.__iter__ = lambda self: iter([fake_row] * 100)
-
-    with patch("datasets.load_dataset", return_value=fake_dataset):
+    fake_datasets_module(value=fake_dataset)
+    try:
         result_a = runner.invoke(
             app,
             [
@@ -246,11 +260,11 @@ def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> Non
         assert (tmp_path / "a" / "train.jsonl").read_text() == (
             tmp_path / "b" / "train.jsonl"
         ).read_text()
+    finally:
+        unfake_datasets_module()
 
 
 def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock, patch
-
     rows = [
         {
             "language": "PYTHON",
@@ -270,7 +284,8 @@ def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
     ]
     fake_dataset = MagicMock()
     fake_dataset.__iter__ = lambda self: iter(rows)
-    with patch("datasets.load_dataset", return_value=fake_dataset):
+    fake_datasets_module(value=fake_dataset)
+    try:
         result = runner.invoke(
             app,
             [
@@ -295,11 +310,11 @@ def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
             tmp_path / "out" / "valid.jsonl"
         ).read_text().splitlines()
         assert len(written) == 2
+    finally:
+        unfake_datasets_module()
 
 
 def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock, patch
-
     rows = [
         {
             "messages": [
@@ -316,7 +331,8 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
     ]
     fake_dataset = MagicMock()
     fake_dataset.__iter__ = lambda self: iter(rows)
-    with patch("datasets.load_dataset", return_value=fake_dataset):
+    fake_datasets_module(value=fake_dataset)
+    try:
         result = runner.invoke(
             app,
             [
@@ -337,11 +353,11 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
             if line.strip()
         ]
         assert written == rows
+    finally:
+        unfake_datasets_module()
 
 
 def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
-    from unittest.mock import patch
-
     fake_split = [
         {
             "question_id": "q1",
@@ -357,7 +373,8 @@ def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
         },
     ]
     fake_dataset = {"test": fake_split}
-    with patch("datasets.load_dataset", return_value=fake_dataset):
+    fake_datasets_module(value=fake_dataset)
+    try:
         result = runner.invoke(
             app,
             ["prepare", "evaluate", "--output", str(tmp_path / "lcb.jsonl")],
@@ -370,3 +387,5 @@ def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
         ]
         assert written[0]["question_id"] == "q1"
         assert written[1]["question_id"] == "q2"
+    finally:
+        unfake_datasets_module()
