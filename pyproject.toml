@@ -18,21 +18,21 @@ classifiers = [
 ]
 dependencies = [
   "pyyaml>=6.0",
-  "typer>=0.12",
+  "typer>=0.27.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/example/hone"
-Repository = "https://github.com/example/hone"
-Issues = "https://github.com/example/hone/issues"
+Homepage = "https://github.com/sachncs/finetune"
+Repository = "https://github.com/sachncs/finetune"
+Issues = "https://github.com/sachncs/finetune/issues"
 
 [project.scripts]
 hone = "hone.cli:main"
 
 [project.optional-dependencies]
-dev = ["mypy>=1.13", "pytest>=8.3", "ruff>=0.16.1", "hypothesis>=6.100"]
+dev = ["mypy>=2.3.0", "pytest>=8.3", "ruff>=0.16.1", "hypothesis>=6.100"]
 mlx = ["mlx-lm[train]>=0.29.0", "datasets>=3.0"]
-cuda = ["torch>=2.5", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
+cuda = ["torch>=2.13.0", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
 
 [build-system]
 requires = ["setuptools>=70"]
@@ -71,3 +71,21 @@ ignore_missing_imports = true
 no_implicit_optional = true
 warn_return_any = true
 warn_unused_ignores = true
+
+[tool.vulture]
+# Whitelist false positives.
+
+# Typer-decorated commands. vulture sees the function body but not the
+# @app.command decorator's runtime registration.
+ignore_names = [
+  "hone.cli.__init__.entry",
+  "hone.cli.prepare.swe",
+  "hone.cli.train.swe",
+  # TrialResult.parameters is a public dataclass field.
+  "hone.cli.tune.TrialResult.parameters",
+  # pytestmark is the conventional module-level pytest marker.
+  "tests.integration.test_train.pytestmark",
+  "tests.mlx.test_run.pytestmark",
+  # MagicMock.__iter__ is set so `for row in fake_dataset` works.
+  "tests.integration.test_prepare.__iter__",
+]

@@ -31,6 +31,13 @@ def make_example(row_id: int = 0) -> Example:
     )
 
 
+def test_make_example_is_well_formed() -> None:
+    """Smoke-check the helper used by other tests in this module."""
+    example = make_example(7)
+    assert example.character_count == len("q-7") + len("a-7")
+    assert example.metadata["row_id"] == 7
+
+
 def test_end_to_end_local_jsonl_to_trainable(tmp_path: Path) -> None:
     """Walk a JSONL file through normalize → split → write → read."""
     input_path = tmp_path / "raw.jsonl"
