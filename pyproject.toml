@@ -22,9 +22,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/example/hone"
-Repository = "https://github.com/example/hone"
-Issues = "https://github.com/example/hone/issues"
+Homepage = "https://github.com/sachncs/finetune"
+Repository = "https://github.com/sachncs/finetune"
+Issues = "https://github.com/sachncs/finetune/issues"
 
 [project.scripts]
 hone = "hone.cli:main"
@@ -71,3 +71,21 @@ ignore_missing_imports = true
 no_implicit_optional = true
 warn_return_any = true
 warn_unused_ignores = true
+
+[tool.vulture]
+# Whitelist false positives.
+
+# Typer-decorated commands. vulture sees the function body but not the
+# @app.command decorator's runtime registration.
+ignore_names = [
+  "hone.cli.__init__.entry",
+  "hone.cli.prepare.swe",
+  "hone.cli.train.swe",
+  # TrialResult.parameters is a public dataclass field.
+  "hone.cli.tune.TrialResult.parameters",
+  # pytestmark is the conventional module-level pytest marker.
+  "tests.integration.test_train.pytestmark",
+  "tests.mlx.test_run.pytestmark",
+  # MagicMock.__iter__ is set so `for row in fake_dataset` works.
+  "tests.integration.test_prepare.__iter__",
+]
