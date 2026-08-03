@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from hone.model import Example, Message, Role
+from hone.types import JsonScalar
 
 
 class Normalizer:
@@ -47,3 +48,34 @@ class Normalizer:
                 raise ValueError(f"messages[{index}].role: {error}") from error
             messages.append(Message(role=role, content=str(raw["content"])))
         return tuple(messages)
+
+
+class SweNormalizer:
+    """Convert official SWE-bench rows into patch-generation examples."""
+
+    def normalize(self, record: Mapping[str, object]) -> Example:
+        """Build a prompt containing repository context and the issue text."""
+        statement = str(record.get("problem_statement", "")).strip()
+        if not statement:
+            raise ValueError("missing problem_statement")
+        patch = str(record.get("patch", "")).strip()
+        if not patch:
+            raise ValueError("missing patch")
+        prompt = (
+            "You are repairing a real software repository. Return only a unified "
+            "diff patch; do not explain the answer.\n\n"
+            f"Repository: {str(record.get('repo', '')).strip()}\n"
+            f"Version: {str(record.get('version', '')).strip()}\n\n"
+            f"Issue:\n{statement}"
+        )
+        instance_id = record.get("instance_id")
+        metadata: dict[str, JsonScalar] = {}
+        if instance_id is not None:
+            metadata["instance_id"] = str(instance_id)
+        return Example(
+            messages=(
+                Message(Role.user, prompt),
+                Message(Role.assistant, patch),
+            ),
+            metadata=metadata,
+        )
