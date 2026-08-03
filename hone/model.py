@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TypeAlias
 
 from hone.types import JsonScalar
+
+Scalar: TypeAlias = JsonScalar
+Meta: TypeAlias = dict[str, JsonScalar]
 
 
 class Role(StrEnum):
@@ -38,7 +42,7 @@ class Example:
     """A validated supervised fine-tuning example."""
 
     messages: tuple[Message, ...]
-    metadata: dict[str, JsonScalar] = field(default_factory=dict)
+    metadata: Meta = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if len(self.messages) < 2:
