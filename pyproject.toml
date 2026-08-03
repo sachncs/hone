@@ -30,7 +30,7 @@ Issues = "https://github.com/sachncs/finetune/issues"
 hone = "hone.cli:main"
 
 [project.optional-dependencies]
-dev = ["mypy>=2.3.0", "pytest>=8.3", "ruff>=0.8", "hypothesis>=6.100"]
+dev = ["mypy>=2.3.0", "pytest>=8.3", "ruff>=0.16.1", "hypothesis>=6.100"]
 mlx = ["mlx-lm[train]>=0.29.0", "datasets>=3.0"]
 cuda = ["torch>=2.13.0", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
 
