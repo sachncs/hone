@@ -14,8 +14,7 @@ class Normalizer:
         """Convert a source record or raise a descriptive validation error."""
         raw_messages = record.get("messages")
         if isinstance(raw_messages, list):
-            messages = self._messages(raw_messages)
-            return Example(messages=messages, metadata={})
+            return Example(messages=self.chat(raw_messages), metadata={})
         if "prompt" in record and "completion" in record:
             return Example(
                 messages=(
@@ -26,22 +25,25 @@ class Normalizer:
             )
         raise ValueError("expected 'messages' list or 'prompt'/'completion' pair")
 
-    def _messages(self, raw_messages: list[object]) -> tuple[Message, ...]:
+    @staticmethod
+    def chat(raw_messages: list[object]) -> tuple[Message, ...]:
+        """Validate a chat-style messages list into a tuple of Message.
+
+        Public per AGENTS.md no-semi-private rule. Treat as the
+        chat-format implementation of normalize; prefer normalize
+        for new call sites.
+        """
         messages: list[Message] = []
-        for index, raw_message in enumerate(raw_messages):
-            if not isinstance(raw_message, Mapping):
+        for index, raw in enumerate(raw_messages):
+            if not isinstance(raw, Mapping):
                 raise ValueError(f"messages[{index}] must be an object")
-            if "role" not in raw_message:
+            if "role" not in raw:
                 raise ValueError(f"messages[{index}] is missing 'role'")
-            if "content" not in raw_message:
+            if "content" not in raw:
                 raise ValueError(f"messages[{index}] is missing 'content'")
             try:
-                role = Role(str(raw_message["role"]))
+                role = Role(str(raw["role"]))
             except ValueError as error:
-                raise ValueError(
-                    f"messages[{index}].role: {error}"
-                ) from error
-            messages.append(
-                Message(role=role, content=str(raw_message["content"]))
-            )
+                raise ValueError(f"messages[{index}].role: {error}") from error
+            messages.append(Message(role=role, content=str(raw["content"])))
         return tuple(messages)
