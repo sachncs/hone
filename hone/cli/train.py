@@ -80,9 +80,9 @@ def swe(
 @app.command("all")
 def all_cmd(
     model: str = typer.Option("openbmb/MiniCPM5-1B", "--model"),
-    layers: int = typer.Option(8, "--layers"),
-    accum: int = typer.Option(16, "--accum"),
-    seq_len: int = typer.Option(4096, "--seq-len"),
+    layers: int = typer.Option(16, "--layers"),
+    accum: int = typer.Option(32, "--accum"),
+    seq_len: int = typer.Option(8192, "--seq-len"),
     save_every: int = typer.Option(100000, "--save-every"),
 ) -> None:
     """Run the full training sequence across every dataset."""
@@ -95,34 +95,8 @@ def all_cmd(
     data_root = Path("data/full")
     data_root.mkdir(parents=True, exist_ok=True)
 
-    sequence = [
-        (
-            "ianncity/KIMI-K2.5-1000000x",
-            "General-Distillation,PHD-Science,General-Math,MultilingualSTEM",
-            data_root / "kimi" / "train.jsonl",
-            artifacts_root / "01-kimi",
-        ),
-        (
-            "Modotte/CodeX-7M-Non-Thinking",
-            "default",
-            data_root / "codex" / "train.jsonl",
-            artifacts_root / "02-codex",
-        ),
-        (
-            "inclusionAI/Ling-Coder-SFT",
-            "default",
-            data_root / "ling" / "train.jsonl",
-            artifacts_root / "03-ling",
-        ),
-        (
-            "open-r1/codeforces",
-            "default",
-            data_root / "codeforces" / "train.jsonl",
-            artifacts_root / "04-codeforces",
-        ),
-    ]
     previous_adapter: Path | None = None
-    for repo, configs, data_path, adapter in sequence:
+    for repo, configs, data_path, adapter in FULL_SEQUENCE:
         if not data_path.exists():
             logger.info("preparing %s", data_path)
             mode = "codeforces-text" if "codeforces" in repo else "sft"
@@ -179,4 +153,38 @@ def all_cmd(
         previous_adapter = adapter
 
 
-__all__ = ["app"]
+FULL_SEQUENCE: list[tuple[str, str, Path, Path]] = [
+    (
+        "ianncity/KIMI-K2.5-1000000x",
+        "General-Distillation,PHD-Science,General-Math,MultilingualSTEM",
+        Path("data/full/kimi/train.jsonl"),
+        Path("artifacts/full/01-kimi"),
+    ),
+    (
+        "Modotte/CodeX-7M-Non-Thinking",
+        "default",
+        Path("data/full/codex/train.jsonl"),
+        Path("artifacts/full/02-codex"),
+    ),
+    (
+        "inclusionAI/Ling-Coder-SFT",
+        "default",
+        Path("data/full/ling/train.jsonl"),
+        Path("artifacts/full/03-ling"),
+    ),
+    (
+        "open-r1/codeforces",
+        "default",
+        Path("data/full/codeforces/train.jsonl"),
+        Path("artifacts/full/04-codeforces"),
+    ),
+    (
+        "microsoft/rStar-Coder",
+        "seed_sft",
+        Path("data/full/rstar/train.jsonl"),
+        Path("artifacts/full/05-rstar"),
+    ),
+]
+
+
+__all__ = ["FULL_SEQUENCE", "app"]

@@ -13,6 +13,32 @@ The `code` and `swe` subcommands read a YAML config (default
 `python -m hone.run --config <path>` with `HONE_DEVICE` set
 in the subprocess environment.
 
+## Full sequence
+
+`hone train all` walks every dataset in `hone.cli.train.FULL_SEQUENCE`
+and trains one LoRA adapter per stage, resuming from the previous
+stage's adapter:
+
+| Stage | Repo | Configs |
+|---|---|---|
+| 01-kimi        | `ianncity/KIMI-K2.5-1000000x` | General-Distillation, PHD-Science, General-Math, MultilingualSTEM |
+| 02-codex       | `Modotte/CodeX-7M-Non-Thinking` | default |
+| 03-ling        | `inclusionAI/Ling-Coder-SFT` | default |
+| 04-codeforces  | `open-r1/codeforces` | default |
+| 05-rstar       | `microsoft/rStar-Coder` | seed_sft |
+
+Each stage is skipped if its `train.jsonl` already exists on disk,
+so a partially-completed run can be resumed by re-invoking the
+command. Adapters are written to `artifacts/full/<NN>-<name>/`.
+
+The wrapper `train.sh` runs the same pipeline with output
+redirected to `artifacts/logs/train-<timestamp>.log`:
+
+```bash
+./train.sh
+./train.sh --layers 4 --seq-len 2048
+```
+
 ## Configs
 
 The YAML config keys are the upstream `mlx_lm.lora` contract.
