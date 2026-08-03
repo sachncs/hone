@@ -1,12 +1,12 @@
-name: quality
+name: apple
 
 on:
   push:
   pull_request:
 
 jobs:
-  python-quality:
-    runs-on: ubuntu-latest
+  apple-quality:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -14,10 +14,10 @@ jobs:
           version: latest
       - name: Set up Python
         run: uv python install 3.12
-      - name: Install development dependencies
-        run: uv sync --extra dev
-      - name: Run tests (no mlx)
-        run: uv run pytest -m "not mlx"
+      - name: Install development and MLX dependencies
+        run: uv sync --extra dev --extra mlx
+      - name: Run tests (full suite including mlx)
+        run: uv run pytest
       - name: Check formatting
         run: uv run ruff format --check hone tests
       - name: Run lint
