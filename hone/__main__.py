@@ -1,4 +1,4 @@
-"""Entry point for \`python -m hone\`."""
+"""Entry point for python -m hone."""
 
 from hone.cli import main
 
