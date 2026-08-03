@@ -1,0 +1,26 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install development dependencies
+        run: uv sync --extra dev
+      - name: Run tests
+        run: uv run pytest
+      - name: Check formatting
+        run: uv run ruff format --check src scripts tests
+      - name: Run lint
+        run: uv run ruff check src scripts tests
+      - name: Run type checking
+        run: uv run mypy src scripts tests

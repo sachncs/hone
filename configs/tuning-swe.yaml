@@ -1,0 +1,6 @@
+learning_rate: [0.000004, 0.000008, 0.000016]
+rank: [4, 8, 16]
+num_layers: [8, 12]
+max_seq_length: [3072, 4096]
+grad_accumulation_steps: [8, 16]
+iters: [500, 1000]

@@ -1,0 +1,21 @@
+model: mlx-community/MiniCPM5-1B-4bit
+train: true
+fine_tune_type: lora
+data: data/processed
+seed: 42
+num_layers: 12
+batch_size: 1
+iters: 600
+val_batches: 25
+learning_rate: 0.00001
+adapter_path: artifacts/minicpm5-m3pro-lora
+save_every: 100
+max_seq_length: 4096
+grad_checkpoint: true
+lora_parameters:
+  keys:
+    - self_attn.q_proj
+    - self_attn.v_proj
+  rank: 8
+  scale: 16.0
+  dropout: 0.05
