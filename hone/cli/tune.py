@@ -53,7 +53,9 @@ class TrialResult:
 VALIDATION_LOSS_PATTERN = re.compile(r"Val loss\s+([0-9]+(?:\.[0-9]+)?)")
 
 
-def build_trials(search_space: dict[str, object], max_trials: int | None) -> list[TrialSpec]:
+def build_trials(
+    search_space: dict[str, object], max_trials: int | None
+) -> list[TrialSpec]:
     """Build a deterministic Cartesian search, optionally bounded by a budget."""
     values: list[list[float | int]] = []
     for key in REQUIRED_KEYS:
@@ -81,7 +83,9 @@ def build_trials(search_space: dict[str, object], max_trials: int | None) -> lis
 
 def parse_validation_loss(output: str) -> float | None:
     """Extract the lowest validation loss reported by MLX training."""
-    losses = [float(match.group(1)) for match in VALIDATION_LOSS_PATTERN.finditer(output)]
+    losses = [
+        float(match.group(1)) for match in VALIDATION_LOSS_PATTERN.finditer(output)
+    ]
     return min(losses) if losses else None
 
 

@@ -26,9 +26,7 @@ class Reader:
                 try:
                     record = json.loads(line)
                 except json.JSONDecodeError as error:
-                    raise ValueError(
-                        f"{path}:{line_number}: {error}"
-                    ) from error
+                    raise ValueError(f"{path}:{line_number}: {error}") from error
                 yield self.record(path, line_number, record)
 
     def record(self, path: Path, line_number: int, record: object) -> Example:

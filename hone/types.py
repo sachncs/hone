@@ -2,7 +2,5 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
-JsonScalar: TypeAlias = str | int | float | bool | None
-JsonObject: TypeAlias = dict[str, object]
+JsonScalar = str | int | float | bool | None
+JsonObject = dict[str, object]

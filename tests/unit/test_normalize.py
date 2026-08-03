@@ -18,16 +18,19 @@ def test_normalize_prompt_completion_creates_user_assistant() -> None:
 
 def test_normalize_messages_creates_message_list() -> None:
     example = Normalizer().normalize(
-        {"messages": [{"role": "user", "content": "Q"}, {"role": "assistant", "content": "A"}]}
+        {
+            "messages": [
+                {"role": "user", "content": "Q"},
+                {"role": "assistant", "content": "A"},
+            ]
+        }
     )
     assert [m.role for m in example.messages] == [Role.user, Role.assistant]
 
 
 def test_normalize_messages_rejects_non_object() -> None:
     with pytest.raises(ValueError, match=r"messages\[\d+\] must be an object"):
-        Normalizer().normalize(
-            {"messages": [{"role": "user", "content": "ok"}, "bad"]}
-        )
+        Normalizer().normalize({"messages": [{"role": "user", "content": "ok"}, "bad"]})
 
 
 def test_normalize_messages_rejects_missing_role() -> None:
@@ -54,11 +57,17 @@ def test_normalize_accepts_system_user_assistant() -> None:
             ]
         }
     )
-    assert [m.role for m in example.messages] == [Role.system, Role.user, Role.assistant]
+    assert [m.role for m in example.messages] == [
+        Role.system,
+        Role.user,
+        Role.assistant,
+    ]
 
 
 def test_normalize_rejects_missing_prompt_and_messages() -> None:
-    with pytest.raises(ValueError, match="expected 'messages' list or 'prompt'/'completion'"):
+    with pytest.raises(
+        ValueError, match="expected 'messages' list or 'prompt'/'completion'"
+    ):
         Normalizer().normalize({"foo": "bar"})
 
 

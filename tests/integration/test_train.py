@@ -11,7 +11,6 @@ Apple Silicon with a real model.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +19,8 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from hone.cli import app, train as train_module
+from hone.cli import app
+from hone.cli import train as train_module
 
 pytestmark = pytest.mark.mlx
 
@@ -30,10 +30,19 @@ runner = CliRunner()
 def test_train_code_refuses_nonexistent_config(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        ["train", "code", "--config", str(tmp_path / "missing.yaml"), "--device", "cpu"],
+        [
+            "train",
+            "code",
+            "--config",
+            str(tmp_path / "missing.yaml"),
+            "--device",
+            "cpu",
+        ],
     )
     assert result.exit_code != 0
-    assert "config not found" in result.output or "config not found" in (result.stderr or "")
+    assert "config not found" in result.output or "config not found" in (
+        result.stderr or ""
+    )
 
 
 def test_train_swe_refuses_nonexistent_config(tmp_path: Path) -> None:
@@ -42,7 +51,9 @@ def test_train_swe_refuses_nonexistent_config(tmp_path: Path) -> None:
         ["train", "swe", "--config", str(tmp_path / "missing.yaml"), "--device", "cpu"],
     )
     assert result.exit_code != 0
-    assert "config not found" in result.output or "config not found" in (result.stderr or "")
+    assert "config not found" in result.output or "config not found" in (
+        result.stderr or ""
+    )
 
 
 def test_train_code_refuses_unknown_backend(tmp_path: Path) -> None:
@@ -64,9 +75,14 @@ def test_train_code_sets_hone_device_and_invokes_subprocess(
     captured: dict[str, object] = {}
 
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["command"] = kwargs.get("args", args[0] if args else None)
-        captured["env"] = kwargs.get("env", {})
-        return subprocess.CompletedProcess(captured["command"], 0, stdout="", stderr="")
+        positional = list(args)
+        command_value: list[str] = kwargs.get(
+            "args", positional[0] if positional else []
+        )  # type: ignore[assignment]
+        env_value: dict[str, str] = kwargs.get("env", {})  # type: ignore[assignment]
+        captured["command"] = command_value
+        captured["env"] = env_value
+        return subprocess.CompletedProcess(command_value, 0, stdout="", stderr="")
 
     with patch.object(train_module.subprocess, "run", side_effect=fake_run):
         result = runner.invoke(
@@ -93,10 +109,14 @@ def test_train_swe_sets_hone_device_and_invokes_subprocess(
     captured: dict[str, object] = {}
 
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["env"] = kwargs.get("env", {})
-        return subprocess.CompletedProcess(
-            kwargs.get("args", args[0] if args else None), 0, stdout="", stderr=""
-        )
+        positional = list(args)
+        command_value: list[str] = kwargs.get(
+            "args", positional[0] if positional else []
+        )  # type: ignore[assignment]
+        env_value: dict[str, str] = kwargs.get("env", {})  # type: ignore[assignment]
+        captured["command"] = command_value
+        captured["env"] = env_value
+        return subprocess.CompletedProcess(command_value, 0, stdout="", stderr="")
 
     with patch.object(train_module.subprocess, "run", side_effect=fake_run):
         result = runner.invoke(
@@ -104,4 +124,5 @@ def test_train_swe_sets_hone_device_and_invokes_subprocess(
             ["train", "swe", "--config", str(config), "--device", "gpu"],
         )
     assert result.exit_code == 0
-    assert captured["env"].get("HONE_DEVICE") == "gpu"  # type: ignore[union-attr]
+    env_value: dict[str, str] = captured["env"]  # type: ignore[assignment]
+    assert env_value.get("HONE_DEVICE") == "gpu"

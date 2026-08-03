@@ -109,10 +109,8 @@ def test_reader_skips_blank_lines(tmp_path: Path) -> None:
         metadata={"row_id": 0, "score": 0.0},
     )
     path.write_text(
-        "\n"
-        + '{"messages": [{"role": "user", "content": "q"}, '
-        '{"role": "assistant", "content": "a"}], "row_id": 0, "score": 0.0}\n'
-        + "\n\n",
+        "\n" + '{"messages": [{"role": "user", "content": "q"}, '
+        '{"role": "assistant", "content": "a"}], "row_id": 0, "score": 0.0}\n' + "\n\n",
         encoding="utf-8",
     )
     loaded = list(Reader().read(path))

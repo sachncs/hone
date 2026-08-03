@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from hone.cli import app
@@ -37,9 +36,11 @@ def test_evaluate_invokes_lcb_runner(tmp_path: Path) -> None:
         captured["cwd"] = kwargs.get("cwd")
         return FakeCompleted()
 
-    with patch("hone.cli.evaluate.prepare_evaluate"), patch(
-        "hone.cli.evaluate.generate_file"
-    ), patch("hone.cli.evaluate.subprocess.run", side_effect=fake_run):
+    with (
+        patch("hone.cli.evaluate.prepare_evaluate"),
+        patch("hone.cli.evaluate.generate_file"),
+        patch("hone.cli.evaluate.subprocess.run", side_effect=fake_run),
+    ):
         result = runner.invoke(app, ["evaluate", "run", "--lcb-dir", str(lcb_dir)])
 
     assert result.exit_code == 0

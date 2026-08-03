@@ -15,15 +15,11 @@ class Splitter:
 
     def __init__(self, ratio: float, seed: int) -> None:
         if not 0 < ratio < 1:
-            raise ValueError(
-                f"ratio must be between 0 and 1 (exclusive), got {ratio}"
-            )
+            raise ValueError(f"ratio must be between 0 and 1 (exclusive), got {ratio}")
         self.ratio = ratio
         self.seed = seed
 
-    def split(
-        self, examples: Sequence[Example]
-    ) -> tuple[list[Example], list[Example]]:
+    def split(self, examples: Sequence[Example]) -> tuple[list[Example], list[Example]]:
         """Return shuffled (train, valid) partitions.
 
         Preconditions:
@@ -36,9 +32,7 @@ class Splitter:
         - Order is deterministic for a given seed.
         """
         if len(examples) < 2:
-            raise ValueError(
-                f"at least two examples are required, got {len(examples)}"
-            )
+            raise ValueError(f"at least two examples are required, got {len(examples)}")
         shuffled = list(examples)
         random.Random(self.seed).shuffle(shuffled)
         valid_count = max(MIN_VALID, round(len(shuffled) * self.ratio))

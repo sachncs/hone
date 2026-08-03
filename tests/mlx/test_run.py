@@ -8,13 +8,12 @@ skip cleanly without error.
 from __future__ import annotations
 
 import importlib
+import logging
 
 import pytest
 
 pytestmark = pytest.mark.mlx
 mlx_core = pytest.importorskip("mlx.core")
-
-import logging
 
 run = importlib.import_module("hone.run")
 DEVICES = run.DEVICES
@@ -119,7 +118,7 @@ def test_run_help_works(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_devices_constant() -> None:
-    assert DEVICES == frozenset({"cpu", "gpu"})
+    assert frozenset({"cpu", "gpu"}) == DEVICES
 
 
 def test_scripts_directory_is_gone() -> None:

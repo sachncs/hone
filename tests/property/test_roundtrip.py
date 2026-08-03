@@ -5,7 +5,6 @@ from __future__ import annotations
 from hypothesis import HealthCheck, given, settings, strategies
 
 from hone import Example, Message, Reader, Role, Splitter, Writer
-from hone.model import Meta
 from hone.normalize import Normalizer
 
 messages_strategy = strategies.lists(
@@ -19,8 +18,10 @@ messages_strategy = strategies.lists(
 
 example_strategy = messages_strategy.map(
     lambda msgs: Example(
-        messages=tuple(Message(role=r, content=c) for r, c in msgs)
-        + (Message(role=Role.assistant, content="x"),),
+        messages=(
+            *tuple(Message(role=r, content=c) for r, c in msgs),
+            Message(role=Role.assistant, content="x"),
+        ),
         metadata={},
     )
 )
@@ -28,12 +29,16 @@ example_strategy = messages_strategy.map(
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(example_strategy)
-def test_writer_reader_roundtrip_preserves_example(tmp_path, example: Example) -> None:
+def test_writer_reader_roundtrip_preserves_example(example: Example) -> None:
     """read(write([example])) == [example] for any valid Example."""
-    path = tmp_path / "rt.jsonl"
-    Writer().write(path, [example])
-    loaded = list(Reader().read(path))
-    assert loaded == [example]
+    import tempfile
+    from pathlib import Path as _P
+
+    with tempfile.TemporaryDirectory() as d:
+        path = _P(d) / "rt.jsonl"
+        Writer().write(path, [example])
+        loaded = list(Reader().read(path))
+        assert loaded == [example]
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -60,14 +65,14 @@ chat_record_strategy = strategies.fixed_dictionaries(
             strategies.fixed_dictionaries(
                 {
                     "role": strategies.sampled_from(["user", "assistant"]),
-                    "content": strategies.text(min_size=1).map(lambda s: s.strip() or "x"),
+                    "content": strategies.text(min_size=1).map(
+                        lambda s: s.strip() or "x"
+                    ),
                 }
             ),
             min_size=1,
             max_size=2,
-        ).map(
-            lambda items: items + [{"role": "assistant", "content": "x"}]
-        )
+        ).map(lambda items: [*items, {"role": "assistant", "content": "x"}])
     }
 )
 

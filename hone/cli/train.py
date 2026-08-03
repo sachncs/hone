@@ -19,7 +19,9 @@ def _run_mlx(config: Path, device: str) -> int:
     logger = setup(verbose=False)
     environment = os.environ.copy()
     environment["HONE_DEVICE"] = device
-    logger.info("running python -m hone.run --config %s (HONE_DEVICE=%s)", config, device)
+    logger.info(
+        "running python -m hone.run --config %s (HONE_DEVICE=%s)", config, device
+    )
     completed = subprocess.run(
         [sys.executable, "-m", "hone.run", "--config", str(config)],
         env=environment,
@@ -35,7 +37,9 @@ def _run_cuda(config: Path) -> int:
 
 @app.command("code")
 def code(
-    config: str = typer.Option("configs/code.yaml", "--config", help="Path to MLX LoRA config."),
+    config: str = typer.Option(
+        "configs/code.yaml", "--config", help="Path to MLX LoRA config."
+    ),
     device: str = typer.Option("gpu", "--device", help="gpu or cpu."),
     backend: str = typer.Option("mlx", "--backend", help="mlx or cuda."),
 ) -> None:
@@ -54,7 +58,9 @@ def code(
 
 @app.command("swe")
 def swe(
-    config: str = typer.Option("configs/swe.yaml", "--config", help="Path to MLX LoRA config."),
+    config: str = typer.Option(
+        "configs/swe.yaml", "--config", help="Path to MLX LoRA config."
+    ),
     device: str = typer.Option("gpu", "--device", help="gpu or cpu."),
     backend: str = typer.Option("mlx", "--backend", help="mlx or cuda."),
 ) -> None:
@@ -120,28 +126,45 @@ def all_cmd(
         if not data_path.exists():
             logger.info("preparing %s", data_path)
             mode = "codeforces-text" if "codeforces" in repo else "sft"
-            prepare.all_cmd(repo=repo, configs=configs, output=str(data_path), mode=mode)
+            prepare.all_cmd(
+                repo=repo, configs=configs, output=str(data_path), mode=mode
+            )
         if not data_path.is_file():
             raise typer.BadParameter(f"dataset missing after prepare: {data_path}")
 
         iters = max(1, sum(1 for _ in data_path.open(encoding="utf-8")) - 1)
         args = [
-            "--model", model,
+            "--model",
+            model,
             "--train",
-            "--data", str(data_path.parent),
-            "--adapter-path", str(adapter),
-            "--iters", str(iters),
-            "--batch-size", "1",
-            "--grad-accumulation-steps", str(accum),
-            "--num-layers", str(layers),
-            "--max-seq-length", str(seq_len),
-            "--save-every", str(save_every),
-            "--seed", "42",
+            "--data",
+            str(data_path.parent),
+            "--adapter-path",
+            str(adapter),
+            "--iters",
+            str(iters),
+            "--batch-size",
+            "1",
+            "--grad-accumulation-steps",
+            str(accum),
+            "--num-layers",
+            str(layers),
+            "--max-seq-length",
+            str(seq_len),
+            "--save-every",
+            str(save_every),
+            "--seed",
+            "42",
         ]
         if "codeforces" not in repo:
             args.append("--mask-prompt")
         if previous_adapter is not None:
-            args.extend(["--resume-adapter-file", str(previous_adapter / "adapters.safetensors")])
+            args.extend(
+                [
+                    "--resume-adapter-file",
+                    str(previous_adapter / "adapters.safetensors"),
+                ]
+            )
 
         environment = os.environ.copy()
         environment["HONE_DEVICE"] = "gpu"

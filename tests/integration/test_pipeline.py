@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from hone import (
@@ -49,7 +48,17 @@ def test_end_to_end_local_jsonl_to_trainable(tmp_path: Path) -> None:
             handle.write(json.dumps(row) + "\n")
 
     result = runner.invoke(
-        app, ["prepare", "file", "--input", str(input_path), "--output", str(output_dir), "--ratio", "0.1"]
+        app,
+        [
+            "prepare",
+            "file",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_dir),
+            "--ratio",
+            "0.1",
+        ],
     )
     assert result.exit_code == 0
 
@@ -63,7 +72,13 @@ def test_end_to_end_local_jsonl_to_trainable(tmp_path: Path) -> None:
 def test_splitter_after_normalize_roundtrips(tmp_path: Path) -> None:
     """Normalize records, split, and verify each partition round-trips."""
     records = [
-        {"messages": [{"role": "user", "content": f"q{i}"}, {"role": "assistant", "content": f"a{i}"}], "row_id": i}
+        {
+            "messages": [
+                {"role": "user", "content": f"q{i}"},
+                {"role": "assistant", "content": f"a{i}"},
+            ],
+            "row_id": i,
+        }
         for i in range(30)
     ]
     examples = [Normalizer().normalize(r) for r in records]
@@ -81,7 +96,12 @@ def test_splitter_after_normalize_roundtrips(tmp_path: Path) -> None:
 def test_writer_after_normalize_roundtrips(tmp_path: Path) -> None:
     """Normalize then write then read produces identical Example objects."""
     records = [
-        {"messages": [{"role": "user", "content": f"q{i}"}, {"role": "assistant", "content": f"a{i}"}]}
+        {
+            "messages": [
+                {"role": "user", "content": f"q{i}"},
+                {"role": "assistant", "content": f"a{i}"},
+            ]
+        }
         for i in range(5)
     ]
     original = [Normalizer().normalize(r) for r in records]

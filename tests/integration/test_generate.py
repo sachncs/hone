@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from hone.cli.generate import strip_fences
 
 

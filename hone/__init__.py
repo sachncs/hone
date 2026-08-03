@@ -11,16 +11,16 @@ from hone.types import JsonObject, JsonScalar
 __version__ = "0.2.0"
 
 __all__ = [
+    "LOGGER",
+    "MIN_VALID",
+    "REQUIRED_KEYS",
     "Example",
     "JsonObject",
     "JsonScalar",
-    "LOGGER",
     "Message",
     "Meta",
-    "MIN_VALID",
     "Normalizer",
     "Reader",
-    "REQUIRED_KEYS",
     "Role",
     "Scalar",
     "Splitter",

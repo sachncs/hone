@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from hone.model import Example, Message, Meta, Role, Scalar
+from hone.model import Example, Message, Meta, Role
 
 
 def test_role_accepts_system_user_assistant() -> None:

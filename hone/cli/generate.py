@@ -10,7 +10,9 @@ import typer
 
 from hone.log import setup
 
-app: typer.Typer = typer.Typer(help="Generate text from a trained adapter.", no_args_is_help=True)
+app: typer.Typer = typer.Typer(
+    help="Generate text from a trained adapter.", no_args_is_help=True
+)
 
 
 @app.command("prompt")
@@ -88,8 +90,7 @@ def file(
                         "content": (
                             "Solve this competitive-programming problem. "
                             "Return only the complete solution code, with no "
-                            "markdown fences.\n\n"
-                            + str(row["question_content"])
+                            "markdown fences.\n\n" + str(row["question_content"])
                         ),
                     }
                 ],
@@ -110,7 +111,9 @@ def file(
             outputs.append({"question_id": row["question_id"], "code_list": codes})
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(outputs, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(outputs, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     logger.info("wrote %d questions to %s", len(outputs), output_path)
 
 

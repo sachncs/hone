@@ -18,10 +18,16 @@ app: typer.Typer = typer.Typer(help="Prepare datasets.", no_args_is_help=True)
 @app.command("file")
 def file(
     input: str = typer.Option(..., "--input", help="Path to input JSONL."),
-    output: str = typer.Option(..., "--output", help="Directory for train/valid JSONL files."),
-    ratio: float = typer.Option(0.05, "--ratio", help="Validation split ratio (exclusive 0..1)."),
+    output: str = typer.Option(
+        ..., "--output", help="Directory for train/valid JSONL files."
+    ),
+    ratio: float = typer.Option(
+        0.05, "--ratio", help="Validation split ratio (exclusive 0..1)."
+    ),
     seed: int = typer.Option(42, "--seed", help="Deterministic seed."),
-    max_samples: int | None = typer.Option(None, "--max-samples", help="Cap on examples read."),
+    max_samples: int | None = typer.Option(
+        None, "--max-samples", help="Cap on examples read."
+    ),
 ) -> None:
     """Normalize and split a local JSONL file."""
     logger = setup(verbose=False)
@@ -42,7 +48,9 @@ def file(
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as error:
-                raise typer.BadParameter(f"{input_path}:{line_number}: {error}") from error
+                raise typer.BadParameter(
+                    f"{input_path}:{line_number}: {error}"
+                ) from error
             if not isinstance(record, dict):
                 raise typer.BadParameter(
                     f"{input_path}:{line_number}: each record must be an object"
@@ -50,7 +58,9 @@ def file(
             try:
                 examples.append(normalizer.normalize(record))
             except ValueError as error:
-                raise typer.BadParameter(f"{input_path}:{line_number}: {error}") from error
+                raise typer.BadParameter(
+                    f"{input_path}:{line_number}: {error}"
+                ) from error
     if max_samples is not None:
         examples = examples[:max_samples]
 
@@ -68,12 +78,20 @@ def file(
 
 @app.command("code")
 def code(
-    dataset: str = typer.Option("teven/code_contests", "--dataset", help="HuggingFace dataset ID."),
+    dataset: str = typer.Option(
+        "teven/code_contests", "--dataset", help="HuggingFace dataset ID."
+    ),
     split: str = typer.Option("train", "--split", help="HF dataset split."),
-    output: str = typer.Option("data/processed/code", "--output", help="Output directory."),
-    language: str = typer.Option("PYTHON", "--language", help="Programming language filter."),
+    output: str = typer.Option(
+        "data/processed/code", "--output", help="Output directory."
+    ),
+    language: str = typer.Option(
+        "PYTHON", "--language", help="Programming language filter."
+    ),
     max_samples: int = typer.Option(20000, "--max-samples", help="Reservoir cap."),
-    scan_limit: int = typer.Option(250000, "--scan-limit", help="Stop scanning after this many rows."),
+    scan_limit: int = typer.Option(
+        250000, "--scan-limit", help="Stop scanning after this many rows."
+    ),
     ratio: float = typer.Option(0.02, "--ratio", help="Validation ratio."),
     seed: int = typer.Option(42, "--seed", help="Deterministic seed."),
 ) -> None:
@@ -145,17 +163,25 @@ def code(
 
 @app.command("swe")
 def swe(
-    dataset: str = typer.Option("SWE-bench/SWE-bench", "--dataset", help="HuggingFace dataset ID."),
+    dataset: str = typer.Option(
+        "SWE-bench/SWE-bench", "--dataset", help="HuggingFace dataset ID."
+    ),
     split: str = typer.Option("train", "--split", help="HF dataset split."),
-    output: str = typer.Option("data/processed/swe", "--output", help="Output directory."),
+    output: str = typer.Option(
+        "data/processed/swe", "--output", help="Output directory."
+    ),
     ratio: float = typer.Option(0.05, "--ratio", help="Validation ratio."),
     max_samples: int | None = typer.Option(None, "--max-samples", help="Cap."),
-    max_chars: int = typer.Option(14000, "--max-chars", help="Drop rows exceeding this prompt+patch length."),
+    max_chars: int = typer.Option(
+        14000, "--max-chars", help="Drop rows exceeding this prompt+patch length."
+    ),
     seed: int = typer.Option(42, "--seed", help="Deterministic seed."),
 ) -> None:
     """Build SWE-bench SFT rows. Refuses non-train splits."""
     if split != "train":
-        raise typer.BadParameter("refusing non-train split; evaluation patches would leak")
+        raise typer.BadParameter(
+            "refusing non-train split; evaluation patches would leak"
+        )
     if not 0 < ratio < 1:
         raise typer.BadParameter("--ratio must be between 0 and 1")
     if max_samples is not None and max_samples < 2:
@@ -218,8 +244,12 @@ def all_cmd(
 
     def as_sft(row: dict[str, object]) -> dict[str, object] | None:
         role_map = {
-            "human": "user", "user": "user", "system": "system",
-            "assistant": "assistant", "gpt": "assistant", "bot": "assistant",
+            "human": "user",
+            "user": "user",
+            "system": "system",
+            "assistant": "assistant",
+            "gpt": "assistant",
+            "bot": "assistant",
         }
         raw_messages = row.get("messages")
         if isinstance(raw_messages, list):
@@ -238,14 +268,26 @@ def all_cmd(
                 return {"messages": out}
             return None
         prompt = next(
-            (row.get(k) for k in ("prompt", "question", "instruction", "problem") if row.get(k)),
+            (
+                row.get(k)
+                for k in ("prompt", "question", "instruction", "problem")
+                if row.get(k)
+            ),
             None,
         )
         answer = next(
-            (row.get(k) for k in ("completion", "response", "answer", "solution", "output") if row.get(k)),
+            (
+                row.get(k)
+                for k in ("completion", "response", "answer", "solution", "output")
+                if row.get(k)
+            ),
             None,
         )
-        if prompt is not None and answer is not None and not isinstance(answer, (dict, list)):
+        if (
+            prompt is not None
+            and answer is not None
+            and not isinstance(answer, (dict, list))
+        ):
             return {
                 "messages": [
                     {"role": "user", "content": str(prompt).strip()},
@@ -272,7 +314,11 @@ def all_cmd(
             dataset = load_dataset(repo, name=config, split=split, streaming=True)
             for row in dataset:
                 try:
-                    item = codeforces_text(row) if mode == "codeforces-text" else as_sft(row)
+                    item = (
+                        codeforces_text(row)
+                        if mode == "codeforces-text"
+                        else as_sft(row)
+                    )
                 except ValueError:
                     item = None
                 if item is None:
@@ -292,8 +338,12 @@ def all_cmd(
 
 @app.command("evaluate")
 def evaluate(
-    version: str = typer.Option("release_v2", "--version", help="LiveCodeBench release tag."),
-    output: str = typer.Option("data/eval/lcb.jsonl", "--output", help="Output JSONL path."),
+    version: str = typer.Option(
+        "release_v2", "--version", help="LiveCodeBench release tag."
+    ),
+    output: str = typer.Option(
+        "data/eval/lcb.jsonl", "--output", help="Output JSONL path."
+    ),
 ) -> None:
     """Download LiveCodeBench prompts for evaluation only."""
     from datasets import load_dataset

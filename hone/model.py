@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TypeAlias
 
 from hone.types import JsonScalar
 
-Scalar: TypeAlias = JsonScalar
-Meta: TypeAlias = dict[str, JsonScalar]
+type Scalar = JsonScalar
+type Meta = dict[str, JsonScalar]
 
 
 class Role(StrEnum):
