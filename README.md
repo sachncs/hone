@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">hone</h1>
-  <p align="center">Production-grade model- and dataset-agnostic supervised fine-tuning pipeline for Apple Silicon.</p>
+  <p align="center">Apple Silicon supervised fine-tuning pipeline — plug-and-play LoRA training on the M-series Mac.</p>
   <p align="center">
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.12%7C3.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
@@ -10,23 +10,30 @@
   </p>
 </p>
 
-**hone** is a single-word, plug-and-play supervised fine-tuning pipeline
-targeting Apple Silicon out of the box, with a CUDA/Unsloth fallback
-for NVIDIA hosts. The default backend is MLX-LM with LoRA; the data
-contract is a plain JSONL of chat messages or `prompt`/`completion`
-pairs; the CLI is a single `hone` binary with five top-level
-subcommands (`prepare`, `train`, `generate`, `tune`, `evaluate`).
+**hone** is a single-word, plug-and-play supervised fine-tuning
+pipeline **for Apple Silicon**. Built and tested on macOS with the
+M-series unified-memory architecture, it uses
+[MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA out of
+the box and falls back to a CUDA/Unsloth path on NVIDIA hosts.
+
+This is a fine-tuning pipeline for Apple Silicon. The default model
+reference is `openbmb/MiniCPM5-1B`; the quantized MLX form
+(`mlx-community/MiniCPM5-1B-4bit`) is used only for inference. The
+data contract is a plain JSONL of chat messages or
+`prompt`/`completion` pairs; the CLI is a single `hone` binary with
+five top-level subcommands (`prepare`, `train`, `generate`,
+`tune`, `evaluate`).
 
 The pipeline is fully typed, fully documented (Google-style
-docstrings on every public symbol), and ships with explicit
-device selection (`HONE_DEVICE`) plus fail-fast validation when
-Metal is unavailable. The default model reference is
-`openbmb/MiniCPM5-1B`; the quantized MLX form
-(`mlx-community/MiniCPM5-1B-4bit`) is used only for inference.
+docstrings on every public symbol), and ships with explicit device
+selection (`HONE_DEVICE`) plus fail-fast validation when Metal is
+unavailable on Apple Silicon.
+
+> **Author and maintainer**: Sachin
 
 | Concern | Library |
 |---|---|
-| Backend (Apple) | [MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA |
+| Backend (Apple Silicon) | [MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA |
 | Backend (NVIDIA) | [Unsloth](https://github.com/unslothai/unsloth) with LoRA (optional `[cuda]`) |
 | Data format | JSONL (`messages` or `prompt`/`completion`) |
 | CLI | [Typer](https://github.com/tiangolo/typer) |
@@ -37,7 +44,8 @@ Metal is unavailable. The default model reference is
 
 ## Features
 
-- **Plug-and-play Apple Silicon** — `uv pip install -e '.[dev,mlx]'` and `hone train code` works out of the box.
+- **Built for Apple Silicon** — `uv pip install -e '.[dev,mlx]'` and `hone train code` runs on the M-series GPU; the launcher detects Metal at startup and refuses to fall back to CPU silently.
+- **Unified-memory aware** — Conservative defaults for 18 GB M3 Pro: 4-bit base model, batch size 1, gradient checkpointing, gradient accumulation instead of memory-heavy batch.
 - **Explicit GPU device selection** — `HONE_DEVICE=gpu|cpu` env var; launcher refuses to start without Metal on Apple Silicon.
 - **Deterministic dataset preparation** — seeded splitter (`Splitter(ratio, seed)`) with provably disjoint partitions.
 - **Reservoir sampling for large corpora** — `hone prepare code` streams HuggingFace datasets with deterministic seed.
@@ -48,9 +56,23 @@ Metal is unavailable. The default model reference is
 - **Production-grade logging** — every entry point logs via `hone.log`; CLI surfaces exit codes via typer.
 - **No half-private names** — every identifier is public per AGENTS.md; library code raises typed exceptions; CLI converts to exit codes.
 
+## Apple Silicon
+
+hone is targeted at, and primarily developed on, Apple Silicon
+(macOS on M1/M2/M3/M4-series chips with unified memory). The
+MLX backend runs on the Metal GPU; the launcher reads `HONE_DEVICE`
+and refuses to start with `gpu` when Metal is unavailable. The
+default model and the recommended hyperparameters are tuned for an
+18 GB M3 Pro and should be adjusted for other memory budgets.
+
+For NVIDIA hosts, install the `[cuda]` extra and run with
+`--backend cuda`. The CUDA path is a thin wrapper around the
+OpenBMB MiniCPM5 Unsloth recipe; it is not the default and is not
+tested in CI.
+
 ## Installation
 
-### From source
+### From source (Apple Silicon)
 
 ```bash
 git clone https://github.com/sachncs/finetune.git
@@ -66,6 +88,17 @@ Verify:
 python -c "import hone; print(hone.__version__)"   # 0.2.0
 hone --help
 python -m hone.run --help   # delegates to mlx_lm.lora
+```
+
+### From source (NVIDIA)
+
+```bash
+git clone https://github.com/sachncs/finetune.git
+cd finetune
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -e '.[dev,cuda]'
+hone train code --backend cuda
 ```
 
 | Extra | Includes |
@@ -88,7 +121,7 @@ Reads JSONL, normalizes each line to a chat record, splits 95/5 with
 seed 42, writes `train.jsonl` and `valid.jsonl` under the output
 directory.
 
-### Train
+### Train (Apple Silicon, MLX)
 
 ```bash
 hone train code
@@ -240,6 +273,7 @@ disjoint + element-preservation, Normalizer validity).
 
 | Category | Technology |
 |---|---|
+| Target platform | Apple Silicon (macOS, M-series) |
 | Language | Python 3.12+ |
 | Backend (Apple) | MLX-LM with LoRA |
 | Backend (NVIDIA) | Unsloth with LoRA |
@@ -251,13 +285,19 @@ disjoint + element-preservation, Normalizer validity).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are
+welcome; the maintainer (Sachin) reviews every PR.
 
 ## Security
 
 Vulnerability reporting, supported versions, and the disclosure
 timeline live in [SECURITY.md](SECURITY.md).
 
+## Author
+
+**Sachin** — author and maintainer. See
+[github.com/sachncs](https://github.com/sachncs).
+
 ## License
 
-[MIT](LICENSE) © 2026 hone contributors
+[MIT](LICENSE) © 2026 Sachin

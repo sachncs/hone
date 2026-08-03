@@ -1,7 +1,9 @@
 # Installation
 
-`hone` targets Python 3.12 and Apple Silicon by default. A CUDA
-fallback is available for non-Mac hosts.
+`hone` is built for Apple Silicon — macOS on M1/M2/M3/M4-series
+chips with unified memory. The MLX backend runs on the Metal GPU
+and is the default and supported path. A CUDA/Unsloth fallback
+is available for NVIDIA hosts.
 
 ## Apple Silicon (MLX, recommended)
 

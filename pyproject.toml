@@ -1,17 +1,19 @@
 [project]
 name = "hone"
 version = "0.2.0"
-description = "Model- and dataset-agnostic supervised fine-tuning pipeline."
+description = "Apple Silicon supervised fine-tuning pipeline — plug-and-play LoRA training on the M-series Mac."
 requires-python = ">=3.12,<3.14"
 license = { text = "MIT" }
-authors = [{ name = "hone contributors" }]
+authors = [{ name = "Sachin" }]
 readme = "README.md"
-keywords = ["finetune", "lora", "mlx", "training"]
+keywords = ["finetune", "lora", "mlx", "apple-silicon", "training"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
