@@ -90,7 +90,7 @@ def test_setup_logs_device_info() -> None:
     assert logger.level <= logging.INFO
 
 
-def test_run_runs_as_module(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_runs_as_module() -> None:
     import subprocess
     import sys
 
@@ -104,7 +104,7 @@ def test_run_runs_as_module(capsys: pytest.CaptureFixture[str]) -> None:
     assert "--config" in completed.stdout
 
 
-def test_run_help_works(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_help_works() -> None:
     import subprocess
     import sys
 

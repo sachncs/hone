@@ -7,7 +7,6 @@ import sys
 import types
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
@@ -23,9 +22,21 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def fake_datasets_module(value: Any) -> types.ModuleType:
-    """Return a synthetic `datasets` module whose `load_dataset` returns `value`."""
+    """Return a synthetic `datasets` module whose `load_dataset` returns `value`.
+
+    Each call to `load_dataset` returns a fresh iterator so multiple
+    invocations of the same prepare subcommand see the same rows.
+    A list value is iterated fresh per call; a dict value (used by
+    `hone prepare evaluate`, which indexes the result by split name)
+    is returned as-is.
+    """
+    rows: list[Any] = list(value) if not isinstance(value, list) else value
     module = types.ModuleType("datasets")
-    module.load_dataset = lambda *args, **kwargs: value  # type: ignore[attr-defined]
+
+    def load(*args: Any, **kwargs: Any) -> Any:
+        return value if isinstance(value, dict) else iter(rows)
+
+    module.load_dataset = load
     sys.modules["datasets"] = module
     return module
 
@@ -177,13 +188,10 @@ def test_prepare_swe_refuses_test_split() -> None:
 
 
 def test_prepare_swe_filters_by_max_chars(tmp_path: Path) -> None:
-    fake_dataset = MagicMock()
-    fake_dataset.__iter__ = lambda self: iter(
-        [
-            {"instance_id": "i1", "problem_statement": "p", "patch": "x"},
-        ]
-    )
-    fake_datasets_module(value=fake_dataset)
+    rows = [
+        {"instance_id": "i1", "problem_statement": "p", "patch": "x"},
+    ]
+    fake_datasets_module(value=iter(rows))
     try:
         result = runner.invoke(
             app,
@@ -213,9 +221,7 @@ def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> Non
         "description": "x" * 200,
         "solution": "def f(): pass" + "  x" * 30,
     }
-    fake_dataset = MagicMock()
-    fake_dataset.__iter__ = lambda self: iter([fake_row] * 100)
-    fake_datasets_module(value=fake_dataset)
+    fake_datasets_module(value=iter([fake_row] * 100))
     try:
         result_a = runner.invoke(
             app,
@@ -282,9 +288,7 @@ def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
             "solution": "def g(): pass" + "  y" * 30,
         },
     ]
-    fake_dataset = MagicMock()
-    fake_dataset.__iter__ = lambda self: iter(rows)
-    fake_datasets_module(value=fake_dataset)
+    fake_datasets_module(value=iter(rows))
     try:
         result = runner.invoke(
             app,
@@ -329,9 +333,7 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
             ]
         },
     ]
-    fake_dataset = MagicMock()
-    fake_dataset.__iter__ = lambda self: iter(rows)
-    fake_datasets_module(value=fake_dataset)
+    fake_datasets_module(value=iter(rows))
     try:
         result = runner.invoke(
             app,
