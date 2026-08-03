@@ -11,15 +11,18 @@ _FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 def setup(verbose: bool = False) -> logging.Logger:
     """Configure and return the package logger.
 
-    Idempotent: calling setup() twice does not duplicate handlers.
-    verbose=True sets DEBUG level; verbose=False sets INFO.
+    Always replaces the StreamHandler so subsequent invocations
+    (e.g. across multiple CliRunner.invoke calls) get a fresh
+    stream. Multiple handlers on the same logger cause duplicate
+    log lines.
     """
     logger = logging.getLogger(LOGGER)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(_FORMAT))
-        logger.addHandler(handler)
-        logger.propagate = False
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(_FORMAT))
+    logger.addHandler(handler)
+    logger.propagate = False
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     return logger
 
