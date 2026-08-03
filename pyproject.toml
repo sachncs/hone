@@ -1,58 +1,64 @@
 [project]
-name = "finetune-pipeline"
-version = "0.1.0"
+name = "hone"
+version = "0.2.0"
+description = "Model- and dataset-agnostic supervised fine-tuning pipeline."
 requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "hone contributors" }]
+readme = "README.md"
+keywords = ["finetune", "lora", "mlx", "training"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "pyyaml>=6.0",
+  "typer>=0.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/example/hone"
+Repository = "https://github.com/example/hone"
+Issues = "https://github.com/example/hone/issues"
+
+[project.scripts]
+hone = "hone.cli:main"
+
+[project.optional-dependencies]
+dev = ["mypy>=1.13", "pytest>=8.3", "ruff>=0.8", "hypothesis>=6.100"]
+mlx = ["mlx-lm[train]>=0.29.0", "datasets>=3.0"]
+cuda = ["torch>=2.5", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
 
 [build-system]
 requires = ["setuptools>=70"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[project.scripts]
-finetune-prepare-data = "finetune.cli:prepare_data_main"
-
-[project.optional-dependencies]
-dev = [
-  "mypy>=1.13",
-  "pytest>=8.3",
-  "ruff>=0.8",
-]
-mlx = [
-  "mlx-lm[train]>=0.29.0",
-  "datasets>=3.0",
-]
-cuda = [
-  "torch>=2.5",
-  "datasets>=3.0",
-  "transformers>=4.57.3,<5",
-  "trl>=0.18",
-  "peft>=0.14",
-  "unsloth",
-]
+packages = ["hone", "hone.cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-pythonpath = ["src", "."]
+pythonpath = ["."]
+markers = [
+  "mlx: requires Apple Silicon Metal backend",
+  "slow: takes more than 1 second",
+]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-include = ["scripts/*.py", "tests/*.py"]
+include = ["hone", "tests"]
+extend-exclude = ["build", "dist"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["finetune"]
+known-first-party = ["hone"]
 
 [tool.mypy]
 explicit_package_bases = true
