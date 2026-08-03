@@ -79,7 +79,7 @@ def swe(
 
 @app.command("all")
 def all_cmd(
-    model: str = typer.Option("mlx-community/MiniCPM5-1B-4bit", "--model"),
+    model: str = typer.Option("openbmb/MiniCPM5-1B", "--model"),
     layers: int = typer.Option(8, "--layers"),
     accum: int = typer.Option(16, "--accum"),
     seq_len: int = typer.Option(4096, "--seq-len"),

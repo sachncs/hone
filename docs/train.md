@@ -19,7 +19,7 @@ The YAML config keys are the upstream `mlx_lm.lora` contract.
 `hone` does not rename them.
 
 ```yaml
-model: mlx-community/MiniCPM5-1B-4bit
+model: openbmb/MiniCPM5-1B
 train: true
 fine_tune_type: lora
 data: data/processed/code

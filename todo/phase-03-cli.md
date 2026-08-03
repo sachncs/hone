@@ -107,7 +107,7 @@ Acceptance: same as T3.7.
 
 ### T3.9 — Implement `hone/cli/train.py::all`
 
-`all(model: str = "mlx-community/MiniCPM5-1B-4bit", layers: int = 8,
+`all(model: str = "openbmb/MiniCPM5-1B", layers: int = 8,
 accum: int = 16, seq_len: int = 4096, save_every: int = 100000)` —
 full sequence mlx training (was `scripts/train_full_sequence.sh`).
 
@@ -129,7 +129,7 @@ Acceptance:
 
 ### T3.11 — Implement `hone/cli/generate.py::prompt`
 
-`prompt(prompt: str, model: str = "mlx-community/MiniCPM5-1B-4bit",
+`prompt(prompt: str, model: str = "openbmb/MiniCPM5-1B",
 adapter: Path | None = None, max_tokens: int = 1024, temperature:
 float = 0.2)` — single-prompt generation.
 
@@ -142,7 +142,7 @@ Acceptance:
 ### T3.12 — Implement `hone/cli/generate.py::file`
 
 `file(input: Path, output: Path = Path("artifacts/lcb_outputs.json"),
-model: str = "mlx-community/MiniCPM5-1B-4bit", adapter: Path | None =
+model: str = "openbmb/MiniCPM5-1B", adapter: Path | None =
 None, samples: int = 1, max_tokens: int = 1536, temperature: float =
 0.2)` — bulk generation from JSONL prompts.
 

@@ -50,12 +50,6 @@ uv run pytest
 - Library code uses the package logger (`hone.log`), never
   `print(...)`.
 
-## Contributor guide
-
-The internal contributor guide (AGENTS.md) is gitignored; each
-developer regenerates it from the canonical source at
-<https://example.com/hone/agents.md>.
-
 ## Release process
 
 1. Bump `version` in `pyproject.toml` and `hone/__init__.py`.

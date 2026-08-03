@@ -45,7 +45,7 @@ def test_save_writes_yaml_file(tmp_path: Path) -> None:
 def test_roundtrip_yaml(tmp_path: Path) -> None:
     path = tmp_path / "rt.yaml"
     original = {
-        "model": "mlx-community/MiniCPM5-1B-4bit",
+        "model": "openbmb/MiniCPM5-1B",
         "train": True,
         "data": "data/processed/code",
         "seed": 42,

@@ -18,7 +18,7 @@ app: typer.Typer = typer.Typer(
 @app.command("prompt")
 def prompt(
     prompt: str = typer.Argument(..., help="Prompt text."),
-    model: str = typer.Option("mlx-community/MiniCPM5-1B-4bit", "--model"),
+    model: str = typer.Option("openbmb/MiniCPM5-1B", "--model"),
     adapter: str | None = typer.Option(None, "--adapter", help="Adapter path."),
     max_tokens: int = typer.Option(1024, "--max-tokens"),
     temperature: float = typer.Option(0.2, "--temperature"),
@@ -64,7 +64,7 @@ def strip_fences(text: str) -> str:
 def file(
     input: str = typer.Option(..., "--input", help="JSONL of prompts."),
     output: str = typer.Option("artifacts/lcb_outputs.json", "--output"),
-    model: str = typer.Option("mlx-community/MiniCPM5-1B-4bit", "--model"),
+    model: str = typer.Option("openbmb/MiniCPM5-1B", "--model"),
     adapter: str | None = typer.Option(None, "--adapter"),
     samples: int = typer.Option(1, "--samples"),
     max_tokens: int = typer.Option(1536, "--max-tokens"),
