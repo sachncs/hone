@@ -32,7 +32,7 @@ hone = "hone.cli:main"
 [project.optional-dependencies]
 dev = ["mypy>=1.13", "pytest>=8.3", "ruff>=0.8", "hypothesis>=6.100"]
 mlx = ["mlx-lm[train]>=0.29.0", "datasets>=3.0"]
-cuda = ["torch>=2.5", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
+cuda = ["torch>=2.13.0", "datasets>=3.0", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
 
 [build-system]
 requires = ["setuptools>=70"]
