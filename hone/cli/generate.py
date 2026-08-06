@@ -25,7 +25,7 @@ def prompt(
 ) -> None:
     """Single-prompt generation."""
     from mlx_lm import generate, load
-    from mlx_lm import sample_utils as utils
+    from mlx_lm import sample_utils as sample
 
     loaded = load(model, adapter_path=adapter, return_config=False)
     model_obj, tokenizer = loaded[0], loaded[1]
@@ -40,7 +40,7 @@ def prompt(
             tokenizer,
             prompt=formatted_prompt,
             max_tokens=max_tokens,
-            sampler=utils.make_sampler(temp=temperature),
+            sampler=sample.make_sampler(temp=temperature),
             verbose=False,
         )
         + "\n"
@@ -72,7 +72,7 @@ def file(
 ) -> None:
     """Bulk generation from a JSONL prompts file."""
     from mlx_lm import generate, load
-    from mlx_lm import sample_utils as utils
+    from mlx_lm import sample_utils as sample
 
     logger = setup(verbose=False)
     loaded = load(model, adapter_path=adapter, return_config=False)
@@ -104,7 +104,7 @@ def file(
                     tokenizer,
                     prompt=formatted_prompt,
                     max_tokens=max_tokens,
-                    sampler=utils.make_sampler(temp=temperature),
+                    sampler=sample.make_sampler(temp=temperature),
                     verbose=False,
                 )
                 codes.append(strip_fences(text))
