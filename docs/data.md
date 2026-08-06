@@ -50,6 +50,12 @@ hone prepare evaluate   LiveCodeBench prompts for evaluation only
 - The validation set has at least `MIN_VALID = 1` example.
 - Train and valid are disjoint and preserve all elements.
 
+`split_file(source, train_path, valid_path, ratio, seed)` extends
+the same guarantees at file level: it streams a JSONL file into
+disjoint, byte-identical `train`/`valid` files with memory bounded
+by the validation size, deterministic for a given input order and
+seed.
+
 ## Reservoir sampling (code)
 
 `hone prepare code` streams a HuggingFace dataset and keeps a

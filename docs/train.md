@@ -29,7 +29,10 @@ stage's adapter:
 
 Each stage is skipped if its `train.jsonl` already exists on disk,
 so a partially-completed run can be resumed by re-invoking the
-command. Adapters are written to `artifacts/full/<NN>-<name>/`.
+command. Before training, each stage deterministically splits a 5%
+validation holdout (seed 42) into `valid.jsonl`; the split is
+skipped when a fresh `valid.jsonl` already exists. Adapters are
+written to `artifacts/full/<NN>-<name>/`.
 
 The wrapper `train.sh` runs the same pipeline with output
 redirected to `artifacts/logs/train-<timestamp>.log`:
