@@ -18,7 +18,7 @@ hone/
     __init__.py      typer dispatcher + main()
     prepare.py       file, code, swe, all, evaluate
     train.py         code, swe, all
-    generate.py      prompt, file + strip_fences
+    generate.py      prompt, file + unfence
     tune.py          run + TrialSpec, TrialResult
     evaluate.py      run
 

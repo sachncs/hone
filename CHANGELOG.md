@@ -7,14 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `hone.split.split_file`: streaming, seeded, disjoint train/valid
+- `hone.split.partition`: streaming, seeded, disjoint train/valid
   split of a JSONL file with memory bounded by the validation size.
+- `click` is now listed in the `[dev]` extra so the test suite
+  imports it without a manual install step.
+
+### Changed
+- Renamed public API to comply with the single-word identifier
+  rule: `spit` → `partition`, `_FORMAT` → `FORMAT`,
+  `_run_mlx`/`_run_cuda` → `invoke_mlx`/`invoke_cuda`,
+  `read_device` → `device`, `has_metal` → `metal`,
+  `gpu_info` → `gpu`, `setup_device` → `select`,
+  `build_trials` → `expand`, `parse_validation_loss` → `loss`,
+  `load_metrics` → `metrics`, `write_trial_config` → `materialize`,
+  `objective_value` → `score`, `run_trial` → `execute`,
+  `strip_fences` → `unfence`.
+- Forbidden local names (`item`, `valid_tmp`, `handler`,
+  `utils`) replaced throughout the library and CLI.
+- Test helper functions renamed to single-word identifiers
+  (`make_examples` → `examples`, `make_jsonl` → `jsonl`,
+  `read_lines` → `lines`, `write_jsonl` → `jsonl`,
+  `write_chat_jsonl` → `chat_jsonl`, `make_chat_row` → `chat_row`,
+  `make_example` → `example`, `fake_datasets_module` →
+  `fake_datasets`, `unfake_datasets_module` → `restore_datasets`,
+  `capture_subprocess_call` → `make_capture`,
+  `argument_after` → `value_after`,
+  `messages_strategy` → `messages`, `example_strategy` → `example`,
+  `chat_record_strategy` → `chat_record`,
+  `message_strategy` → `message`).
 
 ### Fixed
 - `hone train all` now creates a deterministic 5% validation split
   (`valid.jsonl`) per stage before training, fixing the
   `Validation set not found or empty` failure from mlx_lm. `--iters`
   is the post-split train line count.
+- `hone.split.partition` previously called `write()` with mismatched
+  keyword arguments (`train_path`, `valid_path`) that did not match
+  the helper's positional signature.
 
 ## [0.2.0] - 2026-08-03
 
