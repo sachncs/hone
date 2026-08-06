@@ -79,7 +79,7 @@ def split_file(
     if not 0 < ratio < 1:
         raise ValueError(f"ratio must be between 0 and 1 (exclusive), got {ratio}")
 
-    total = _count_valid_lines(source)
+    total = count_valid_lines(source)
     if total < 2:
         raise ValueError(f"at least two JSON lines are required, got {total}")
     valid_count = max(MIN_VALID, round(total * ratio))
@@ -114,9 +114,10 @@ def split_file(
     return total - valid_count, valid_count
 
 
-def _count_valid_lines(path: Path) -> int:
+def count_valid_lines(path: Path) -> int:
     """Return the number of JSON lines in a JSONL file.
 
+    Treat as internal: exposed publicly per the no-semi-private rule.
     Raises ValueError with a ``path:line`` prefix on the first
     malformed line so corrupt or truncated files fail close to their
     source instead of crashing downstream JSONL consumers.
