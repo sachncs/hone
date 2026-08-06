@@ -10,7 +10,7 @@ from hone.jsonl import Reader, Writer
 from hone.model import Example, Message, Role
 
 
-def make_examples(count: int) -> list[Example]:
+def examples(count: int) -> list[Example]:
     return [
         Example(
             messages=(
@@ -25,10 +25,10 @@ def make_examples(count: int) -> list[Example]:
 
 def test_writer_roundtrips_messages(tmp_path: Path) -> None:
     path = tmp_path / "train.jsonl"
-    examples = make_examples(3)
-    Writer().write(path, examples)
+    written = examples(3)
+    Writer().write(path, written)
     loaded = list(Reader().read(path))
-    assert loaded == examples
+    assert loaded == written
 
 
 def test_writer_roundtrips_metadata(tmp_path: Path) -> None:
@@ -49,7 +49,7 @@ def test_writer_roundtrips_metadata(tmp_path: Path) -> None:
 
 def test_writer_creates_parent_directories(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "deeper" / "train.jsonl"
-    Writer().write(path, make_examples(2))
+    Writer().write(path, examples(2))
     assert path.is_file()
 
 
@@ -83,7 +83,7 @@ def test_writer_serializes_unicode(tmp_path: Path) -> None:
 
 def test_writer_returns_count(tmp_path: Path) -> None:
     path = tmp_path / "train.jsonl"
-    count = Writer().write(path, make_examples(5))
+    count = Writer().write(path, examples(5))
     assert count == 5
 
 

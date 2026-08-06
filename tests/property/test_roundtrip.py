@@ -7,7 +7,7 @@ from hypothesis import HealthCheck, given, settings, strategies
 from hone import Example, Message, Reader, Role, Splitter, Writer
 from hone.normalize import Normalizer
 
-messages_strategy = strategies.lists(
+messages = strategies.lists(
     strategies.tuples(
         strategies.sampled_from([Role.system, Role.user]),
         strategies.text(min_size=1).map(lambda s: s.strip() or "x"),
@@ -16,7 +16,7 @@ messages_strategy = strategies.lists(
     max_size=4,
 )
 
-example_strategy = messages_strategy.map(
+example = messages.map(
     lambda msgs: Example(
         messages=(
             *tuple(Message(role=r, content=c) for r, c in msgs),
@@ -28,38 +28,38 @@ example_strategy = messages_strategy.map(
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(example_strategy)
-def test_writer_reader_roundtrip_preserves_example(example: Example) -> None:
-    """read(write([example])) == [example] for any valid Example."""
+@given(example)
+def test_writer_reader_roundtrip_preserves_example(sample: Example) -> None:
+    """read(write([sample])) == [sample] for any valid Example."""
     import tempfile
     from pathlib import Path as _P
 
     with tempfile.TemporaryDirectory() as d:
         path = _P(d) / "rt.jsonl"
-        Writer().write(path, [example])
+        Writer().write(path, [sample])
         loaded = list(Reader().read(path))
-        assert loaded == [example]
+        assert loaded == [sample]
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(strategies.lists(example_strategy, min_size=2, max_size=20))
-def test_splitter_disjoint_for_random_examples(examples: list[Example]) -> None:
-    """train and valid are disjoint for any input of >=2 examples."""
-    train, valid = Splitter(0.25, seed=42).split(examples)
+@given(strategies.lists(example, min_size=2, max_size=20))
+def test_splitter_disjoint_for_random_examples(samples: list[Example]) -> None:
+    """train and valid are disjoint for any input of >=2 samples."""
+    train, valid = Splitter(0.25, seed=42).split(samples)
     train_ids = {id(e) for e in train}
     valid_ids = {id(e) for e in valid}
     assert train_ids.isdisjoint(valid_ids)
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(strategies.lists(example_strategy, min_size=2, max_size=20))
-def test_splitter_preserves_element_count(examples: list[Example]) -> None:
-    """len(train) + len(valid) == len(examples) for any input."""
-    train, valid = Splitter(0.25, seed=42).split(examples)
-    assert len(train) + len(valid) == len(examples)
+@given(strategies.lists(example, min_size=2, max_size=20))
+def test_splitter_preserves_element_count(samples: list[Example]) -> None:
+    """len(train) + len(valid) == len(samples) for any input."""
+    train, valid = Splitter(0.25, seed=42).split(samples)
+    assert len(train) + len(valid) == len(samples)
 
 
-chat_record_strategy = strategies.fixed_dictionaries(
+chat_record = strategies.fixed_dictionaries(
     {
         "messages": strategies.lists(
             strategies.fixed_dictionaries(
@@ -78,26 +78,26 @@ chat_record_strategy = strategies.fixed_dictionaries(
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(chat_record_strategy)
+@given(chat_record)
 def test_normalize_produces_valid_example(record: dict[str, object]) -> None:
     """Normalizer().normalize(record) satisfies Example invariants."""
-    example = Normalizer().normalize(record)
-    assert isinstance(example, Example)
-    assert len(example.messages) >= 2
-    assert example.messages[-1].role is Role.assistant
-    assert all(message.content.strip() for message in example.messages)
+    sample = Normalizer().normalize(record)
+    assert isinstance(sample, Example)
+    assert len(sample.messages) >= 2
+    assert sample.messages[-1].role is Role.assistant
+    assert all(message.content.strip() for message in sample.messages)
 
 
-message_strategy = strategies.tuples(
+message = strategies.tuples(
     strategies.sampled_from([Role.user, Role.assistant]),
     strategies.text(min_size=1).map(lambda s: s.strip() or "x"),
 ).map(lambda rc: Message(role=rc[0], content=rc[1]))
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(message_strategy)
-def test_message_to_record_roundtrip(message: Message) -> None:
+@given(message)
+def test_message_to_record_roundtrip(sample: Message) -> None:
     """Message.to_record() is the canonical JSON representation."""
-    record = message.to_record()
-    assert record["role"] == str(message.role)
-    assert record["content"] == message.content
+    record = sample.to_record()
+    assert record["role"] == str(sample.role)
+    assert record["content"] == sample.content

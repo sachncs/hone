@@ -21,7 +21,7 @@ from hone.cli import app
 runner = CliRunner()
 
 
-def make_example(row_id: int = 0) -> Example:
+def example(row_id: int = 0) -> Example:
     return Example(
         messages=(
             Message(role=Role.user, content=f"q-{row_id}"),
@@ -31,11 +31,11 @@ def make_example(row_id: int = 0) -> Example:
     )
 
 
-def test_make_example_is_well_formed() -> None:
+def test_example_is_well_formed() -> None:
     """Smoke-check the helper used by other tests in this module."""
-    example = make_example(7)
-    assert example.character_count == len("q-7") + len("a-7")
-    assert example.metadata["row_id"] == 7
+    sample = example(7)
+    assert sample.character_count == len("q-7") + len("a-7")
+    assert sample.metadata["row_id"] == 7
 
 
 def test_end_to_end_local_jsonl_to_trainable(tmp_path: Path) -> None:

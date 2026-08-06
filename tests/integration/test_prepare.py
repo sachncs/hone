@@ -15,13 +15,13 @@ from hone.cli import app
 runner = CliRunner()
 
 
-def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+def jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def fake_datasets_module(value: Any) -> Any:
+def fake_datasets(value: Any) -> Any:
     """Return a synthetic `datasets` module whose `load_dataset` returns `value`.
 
     Each call to `load_dataset` returns a fresh iterator so multiple
@@ -41,11 +41,11 @@ def fake_datasets_module(value: Any) -> Any:
     return module
 
 
-def unfake_datasets_module() -> None:
+def restore_datasets() -> None:
     sys.modules.pop("datasets", None)
 
 
-def make_chat_row(q: str = "Q", a: str = "A", row_id: int = 0) -> dict[str, Any]:
+def chat_row(q: str = "Q", a: str = "A", row_id: int = 0) -> dict[str, Any]:
     return {
         "messages": [
             {"role": "user", "content": f"{q}-{row_id}"},
@@ -58,8 +58,8 @@ def make_chat_row(q: str = "Q", a: str = "A", row_id: int = 0) -> dict[str, Any]
 def test_prepare_file_creates_train_and_valid(tmp_path: Path) -> None:
     input_path = tmp_path / "raw.jsonl"
     output_dir = tmp_path / "out"
-    rows = [make_chat_row(row_id=i) for i in range(40)]
-    write_jsonl(input_path, rows)
+    rows = [chat_row(row_id=i) for i in range(40)]
+    jsonl(input_path, rows)
 
     result = runner.invoke(
         app,
@@ -84,7 +84,7 @@ def test_prepare_file_creates_train_and_valid(tmp_path: Path) -> None:
 def test_prepare_file_respects_max_samples(tmp_path: Path) -> None:
     input_path = tmp_path / "raw.jsonl"
     output_dir = tmp_path / "out"
-    write_jsonl(input_path, [make_chat_row(row_id=i) for i in range(50)])
+    jsonl(input_path, [chat_row(row_id=i) for i in range(50)])
 
     result = runner.invoke(
         app,
@@ -107,7 +107,7 @@ def test_prepare_file_respects_max_samples(tmp_path: Path) -> None:
 
 def test_prepare_file_respects_seed(tmp_path: Path) -> None:
     input_path = tmp_path / "raw.jsonl"
-    write_jsonl(input_path, [make_chat_row(row_id=i) for i in range(30)])
+    jsonl(input_path, [chat_row(row_id=i) for i in range(30)])
 
     out_a = tmp_path / "a"
     out_b = tmp_path / "b"
@@ -143,7 +143,7 @@ def test_prepare_file_respects_seed(tmp_path: Path) -> None:
 
 def test_prepare_file_deterministic_with_same_seed(tmp_path: Path) -> None:
     input_path = tmp_path / "raw.jsonl"
-    write_jsonl(input_path, [make_chat_row(row_id=i) for i in range(30)])
+    jsonl(input_path, [chat_row(row_id=i) for i in range(30)])
 
     out_a = tmp_path / "a"
     out_b = tmp_path / "b"
@@ -191,7 +191,7 @@ def test_prepare_swe_filters_by_max_chars(tmp_path: Path) -> None:
     rows = [
         {"instance_id": "i1", "problem_statement": "p", "patch": "x"},
     ]
-    fake_datasets_module(value=iter(rows))
+    fake_datasets(value=iter(rows))
     try:
         result = runner.invoke(
             app,
@@ -212,7 +212,7 @@ def test_prepare_swe_filters_by_max_chars(tmp_path: Path) -> None:
             or "not enough valid SWE examples" in (result.stderr or "")
         )
     finally:
-        unfake_datasets_module()
+        restore_datasets()
 
 
 def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> None:
@@ -221,7 +221,7 @@ def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> Non
         "description": "x" * 200,
         "solution": "def f(): pass" + "  x" * 30,
     }
-    fake_datasets_module(value=iter([fake_row] * 100))
+    fake_datasets(value=iter([fake_row] * 100))
     try:
         result_a = runner.invoke(
             app,
@@ -267,7 +267,7 @@ def test_prepare_code_reservoir_sampling_is_deterministic(tmp_path: Path) -> Non
             tmp_path / "b" / "train.jsonl"
         ).read_text()
     finally:
-        unfake_datasets_module()
+        restore_datasets()
 
 
 def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
@@ -288,7 +288,7 @@ def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
             "solution": "def g(): pass" + "  y" * 30,
         },
     ]
-    fake_datasets_module(value=iter(rows))
+    fake_datasets(value=iter(rows))
     try:
         result = runner.invoke(
             app,
@@ -315,7 +315,7 @@ def test_prepare_code_filters_by_language(tmp_path: Path) -> None:
         ).read_text().splitlines()
         assert len(written) == 2
     finally:
-        unfake_datasets_module()
+        restore_datasets()
 
 
 def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
@@ -333,7 +333,7 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
             ]
         },
     ]
-    fake_datasets_module(value=iter(rows))
+    fake_datasets(value=iter(rows))
     try:
         result = runner.invoke(
             app,
@@ -356,7 +356,7 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
         ]
         assert written == rows
     finally:
-        unfake_datasets_module()
+        restore_datasets()
 
 
 def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
@@ -375,7 +375,7 @@ def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
         },
     ]
     fake_dataset = {"test": fake_split}
-    fake_datasets_module(value=fake_dataset)
+    fake_datasets(value=fake_dataset)
     try:
         result = runner.invoke(
             app,
@@ -390,4 +390,4 @@ def test_prepare_evaluate_writes_lcb_prompts(tmp_path: Path) -> None:
         assert written[0]["question_id"] == "q1"
         assert written[1]["question_id"] == "q2"
     finally:
-        unfake_datasets_module()
+        restore_datasets()
