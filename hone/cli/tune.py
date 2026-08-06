@@ -53,9 +53,7 @@ class TrialResult:
 VALIDATION_LOSS_PATTERN = re.compile(r"Val loss\s+([0-9]+(?:\.[0-9]+)?)")
 
 
-def build_trials(
-    search_space: dict[str, object], max_trials: int | None
-) -> list[TrialSpec]:
+def expand(search_space: dict[str, object], max_trials: int | None) -> list[TrialSpec]:
     """Build a deterministic Cartesian search, optionally bounded by a budget."""
     values: list[list[float | int]] = []
     for key in REQUIRED_KEYS:
@@ -63,7 +61,7 @@ def build_trials(
         if not isinstance(options, list) or not options:
             raise ValueError(f"search space must define non-empty {key}")
         values.append(options)
-    trials = [
+    specs = [
         TrialSpec(
             learning_rate=float(combination[0]),
             rank=int(combination[1]),
@@ -77,19 +75,19 @@ def build_trials(
     if max_trials is not None:
         if max_trials < 1:
             raise ValueError("max_trials must be positive")
-        trials = trials[:max_trials]
-    return trials
+        specs = specs[:max_trials]
+    return specs
 
 
-def parse_validation_loss(output: str) -> float | None:
+def loss(output: str) -> float | None:
     """Extract the lowest validation loss reported by MLX training."""
-    losses = [
+    values = [
         float(match.group(1)) for match in VALIDATION_LOSS_PATTERN.finditer(output)
     ]
-    return min(losses) if losses else None
+    return min(values) if values else None
 
 
-def load_metrics(path: Path) -> dict[str, float]:
+def metrics(path: Path) -> dict[str, float]:
     """Load optional benchmark metrics from a hook-produced JSON file."""
     if not path.exists():
         return {}
@@ -103,7 +101,7 @@ def load_metrics(path: Path) -> dict[str, float]:
     }
 
 
-def write_trial_config(
+def materialize(
     path: Path,
     base_config: dict[str, object],
     trial: TrialSpec,
@@ -130,14 +128,14 @@ def write_trial_config(
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
-def objective_value(result: TrialResult, objective: str) -> float | None:
+def score(result: TrialResult, objective: str) -> float | None:
     """Return the objective value for a result."""
     if objective == "validation_loss":
         return result.validation_loss
     return result.benchmark_metrics.get(objective)
 
 
-def run_trial(
+def execute(
     trial_id: str,
     trial: TrialSpec,
     base_config: dict[str, object],
@@ -154,7 +152,7 @@ def run_trial(
     config_path = trial_dir / "config.yaml"
     log_path = trial_dir / "train.log"
     metrics_path = trial_dir / "metrics.json"
-    write_trial_config(config_path, base_config, trial, adapter_path)
+    materialize(config_path, base_config, trial, adapter_path)
     command = [
         sys.executable,
         str(mlx_binary),
@@ -174,8 +172,8 @@ def run_trial(
     )
     output = completed.stdout + completed.stderr
     log_path.write_text(output, encoding="utf-8")
-    validation_loss = parse_validation_loss(output)
-    benchmark_metrics: dict[str, float] = {}
+    validation_loss = loss(output)
+    trial_metrics: dict[str, float] = {}
     status = "completed" if completed.returncode == 0 else "failed"
     if completed.returncode == 0 and benchmark_command:
         environment.update(
@@ -199,7 +197,7 @@ def run_trial(
         )
         if benchmark.returncode != 0:
             status = "benchmark_failed"
-        benchmark_metrics = load_metrics(metrics_path)
+        trial_metrics = metrics(metrics_path)
     if status == "completed" and validation_loss is None:
         status = "missing_validation_loss"
     return TrialResult(
@@ -208,7 +206,7 @@ def run_trial(
         adapter_path=str(adapter_path),
         status=status,
         parameters=trial,
-        benchmark_metrics=benchmark_metrics,
+        benchmark_metrics=trial_metrics,
     )
 
 
@@ -237,7 +235,7 @@ def run(
     if not isinstance(base_config, dict) or not isinstance(search_space, dict):
         raise typer.BadParameter("configuration and search space must be YAML mappings")
 
-    trials = build_trials(search_space, max_trials)
+    specs = expand(search_space, max_trials)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     launcher_path = Path(__file__).resolve().parent.parent / "run.py"
@@ -245,10 +243,10 @@ def run(
         raise typer.BadParameter(f"launcher not found: {launcher_path}")
 
     results: list[TrialResult] = []
-    for index, trial in enumerate(trials, 1):
+    for index, trial in enumerate(specs, 1):
         trial_id = f"trial-{index:03d}"
         results.append(
-            run_trial(
+            execute(
                 trial_id=trial_id,
                 trial=trial,
                 base_config=base_config,
@@ -268,20 +266,19 @@ def run(
     successful = [
         result
         for result in results
-        if result.status == "completed"
-        and objective_value(result, objective) is not None
+        if result.status == "completed" and score(result, objective) is not None
     ]
     if not successful:
         raise typer.BadParameter(f"no successful trial produced objective {objective}")
     if objective == "validation_loss":
         best = min(
             successful,
-            key=lambda result: objective_value(result, objective) or float("inf"),
+            key=lambda result: score(result, objective) or float("inf"),
         )
     else:
         best = max(
             successful,
-            key=lambda result: objective_value(result, objective) or float("-inf"),
+            key=lambda result: score(result, objective) or float("-inf"),
         )
     (output_dir / "best.json").write_text(
         json.dumps(asdict(best), indent=2, sort_keys=True), encoding="utf-8"
@@ -290,7 +287,7 @@ def run(
         "best trial=%s objective=%s value=%s",
         best.trial_id,
         objective,
-        objective_value(best, objective),
+        score(best, objective),
     )
 
 
