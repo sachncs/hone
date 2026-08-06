@@ -4,6 +4,18 @@ All notable changes to **hone** are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `hone.split.split_file`: streaming, seeded, disjoint train/valid
+  split of a JSONL file with memory bounded by the validation size.
+
+### Fixed
+- `hone train all` now creates a deterministic 5% validation split
+  (`valid.jsonl`) per stage before training, fixing the
+  `Validation set not found or empty` failure from mlx_lm. `--iters`
+  is the post-split train line count.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added
