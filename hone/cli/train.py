@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 
 from hone.log import setup
-from hone.split import split_file
+from hone.split import partition
 
 app: typer.Typer = typer.Typer(help="Train adapters.", no_args_is_help=True)
 
@@ -114,7 +114,7 @@ def all_cmd(
         valid_path = data_path.parent / "valid.jsonl"
         fresh_valid = valid_path.is_file() and valid_path.stat().st_size > 0
         if not fresh_valid or data_path.stat().st_mtime > valid_path.stat().st_mtime:
-            train_count, valid_count = split_file(
+            train_count, valid_count = partition(
                 data_path, data_path, valid_path, ratio=0.05, seed=42
             )
             logger.info(

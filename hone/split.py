@@ -43,8 +43,8 @@ class Splitter:
         return train, valid
 
 
-def split_file(
-    source: Path,
+def partition(
+    file: Path,
     train_path: Path,
     valid_path: Path,
     ratio: float,
@@ -57,17 +57,17 @@ def split_file(
     bounded by the validation size rather than the dataset size.
 
     Preconditions:
-    - Every line of source is valid JSON (a malformed or truncated
+    - Every line of file is valid JSON (a malformed or truncated
       line raises ValueError with a ``path:line`` prefix).
-    - source has at least 2 lines.
+    - file has at least 2 lines.
     - ratio is in (0, 1) exclusive.
 
     Postconditions:
-    - train_path and valid_path hold raw source lines, byte-identical.
-    - train and valid are disjoint and together hold every source line.
+    - train_path and valid_path hold raw file lines, byte-identical.
+    - train and valid are disjoint and together hold every file line.
     - len(valid) >= MIN_VALID and len(train) >= 1.
-    - The split is deterministic for a given source order and seed;
-      regenerating the source (e.g. upstream dataset drift) can change
+    - The split is deterministic for a given file order and seed;
+      regenerating the file (e.g. upstream dataset drift) can change
       which lines land in valid.
 
     valid_path is promoted before train_path so a crash between the
@@ -79,7 +79,7 @@ def split_file(
     if not 0 < ratio < 1:
         raise ValueError(f"ratio must be between 0 and 1 (exclusive), got {ratio}")
 
-    total = count_valid_lines(source)
+    total = count(file)
     if total < 2:
         raise ValueError(f"at least two JSON lines are required, got {total}")
     valid_count = max(MIN_VALID, round(total * ratio))
@@ -88,7 +88,7 @@ def split_file(
 
     rng = random.Random(seed)
     reservoir: list[int] = []
-    with source.open(encoding="utf-8", newline="") as input_file:
+    with file.open(encoding="utf-8", newline="") as input_file:
         for line_number, _ in enumerate(input_file, 1):
             if len(reservoir) < valid_count:
                 reservoir.append(line_number)
@@ -97,24 +97,11 @@ def split_file(
                 if index < valid_count:
                     reservoir[index] = line_number
 
-    valid_lines = set(reservoir)
-    train_tmp = train_path.with_suffix(".jsonl.tmp")
-    valid_tmp = valid_path.with_suffix(".jsonl.tmp")
-    train_path.parent.mkdir(parents=True, exist_ok=True)
-    valid_path.parent.mkdir(parents=True, exist_ok=True)
-    with (
-        source.open(encoding="utf-8", newline="") as input_file,
-        train_tmp.open("w", encoding="utf-8", newline="") as train_output,
-        valid_tmp.open("w", encoding="utf-8", newline="") as valid_output,
-    ):
-        for line_number, line in enumerate(input_file, 1):
-            (valid_output if line_number in valid_lines else train_output).write(line)
-    valid_tmp.replace(valid_path)
-    train_tmp.replace(train_path)
+    write(file, train_path, valid_path, set(reservoir))
     return total - valid_count, valid_count
 
 
-def count_valid_lines(path: Path) -> int:
+def count(lines: Path) -> int:
     """Return the number of JSON lines in a JSONL file.
 
     Treat as internal: exposed publicly per the no-semi-private rule.
@@ -122,12 +109,42 @@ def count_valid_lines(path: Path) -> int:
     malformed line so corrupt or truncated files fail close to their
     source instead of crashing downstream JSONL consumers.
     """
-    count = 0
-    with path.open(encoding="utf-8", newline="") as input_file:
+    total = 0
+    with lines.open(encoding="utf-8", newline="") as input_file:
         for line_number, line in enumerate(input_file, 1):
             try:
                 json.loads(line)
             except json.JSONDecodeError as error:
-                raise ValueError(f"{path}:{line_number}: {error}") from error
-            count += 1
-    return count
+                raise ValueError(f"{lines}:{line_number}: {error}") from error
+            total += 1
+    return total
+
+
+def write(
+    jsonl: Path,
+    path: Path,
+    valid: Path,
+    valid_lines: set[int],
+) -> None:
+    """Write a JSONL file's lines into disjoint train and valid files.
+
+    Treat as internal: exposed publicly per the no-semi-private rule.
+    Lines whose 1-based line number is in valid_lines go to the valid
+    file and the rest go to the train file at path; raw lines are
+    preserved byte-identical. The valid file is promoted before the
+    train file so a crash between the renames leaves the holdout on
+    disk instead of dropping it.
+    """
+    train = path.with_suffix(".jsonl.tmp")
+    valid_path_tmp = valid.with_suffix(".jsonl.tmp")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    valid.parent.mkdir(parents=True, exist_ok=True)
+    with (
+        jsonl.open(encoding="utf-8", newline="") as input_file,
+        train.open("w", encoding="utf-8", newline="") as train_output,
+        valid_path_tmp.open("w", encoding="utf-8", newline="") as valid_output,
+    ):
+        for line_number, line in enumerate(input_file, 1):
+            (valid_output if line_number in valid_lines else train_output).write(line)
+    valid_path_tmp.replace(valid)
+    train.replace(path)
