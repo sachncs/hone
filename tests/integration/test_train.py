@@ -173,7 +173,7 @@ def test_train_all_help_runs() -> None:
     assert "--model" in unstyle(result.stdout)
 
 
-def _write_chat_jsonl(path: Path, count: int) -> None:
+def write_chat_jsonl(path: Path, count: int) -> None:
     """Write count distinct chat records to a JSONL file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -187,7 +187,7 @@ def _write_chat_jsonl(path: Path, count: int) -> None:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def _argument_after(command: object, flag: str) -> str:
+def argument_after(command: object, flag: str) -> str:
     assert isinstance(command, list)
     assert flag in command
     return str(command[command.index(flag) + 1])
@@ -195,7 +195,7 @@ def _argument_after(command: object, flag: str) -> str:
 
 def test_train_all_creates_valid_split_before_training(tmp_path: Path) -> None:
     train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
-    _write_chat_jsonl(train_path, 40)
+    write_chat_jsonl(train_path, 40)
     fake_sequence = [
         ("fake/repo", "default", train_path, tmp_path / "adapters" / "01-stage")
     ]
@@ -217,15 +217,15 @@ def test_train_all_creates_valid_split_before_training(tmp_path: Path) -> None:
     assert train_lines + valid_lines == 40
 
     command = captured_subprocess["command"]
-    assert _argument_after(command, "--data") == str(train_path.parent)
-    assert _argument_after(command, "--iters") == str(train_lines)
+    assert argument_after(command, "--data") == str(train_path.parent)
+    assert argument_after(command, "--iters") == str(train_lines)
 
 
 def test_train_all_skips_split_when_valid_present(tmp_path: Path) -> None:
     train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
-    _write_chat_jsonl(train_path, 40)
+    write_chat_jsonl(train_path, 40)
     valid_path = train_path.parent / "valid.jsonl"
-    _write_chat_jsonl(valid_path, 2)
+    write_chat_jsonl(valid_path, 2)
     valid_before = valid_path.read_text(encoding="utf-8")
 
     fake_sequence = [
@@ -243,4 +243,4 @@ def test_train_all_skips_split_when_valid_present(tmp_path: Path) -> None:
 
     assert valid_path.read_text(encoding="utf-8") == valid_before
     command = captured_subprocess["command"]
-    assert _argument_after(command, "--iters") == "40"
+    assert argument_after(command, "--iters") == "40"
