@@ -47,7 +47,7 @@ def prompt(
     )
 
 
-def strip_fences(text: str) -> str:
+def unfence(text: str) -> str:
     """Remove optional markdown fences from generated source code."""
     text = text.strip()
     if text.startswith("```"):
@@ -107,7 +107,7 @@ def file(
                     sampler=sample.make_sampler(temp=temperature),
                     verbose=False,
                 )
-                codes.append(strip_fences(text))
+                codes.append(unfence(text))
             outputs.append({"question_id": row["question_id"], "code_list": codes})
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -117,4 +117,4 @@ def file(
     logger.info("wrote %d questions to %s", len(outputs), output_path)
 
 
-__all__ = ["app", "strip_fences"]
+__all__ = ["app", "unfence"]
