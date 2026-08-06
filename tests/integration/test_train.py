@@ -11,6 +11,7 @@ Apple Silicon with a real model.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -170,3 +171,76 @@ def test_train_all_help_runs() -> None:
     result = runner.invoke(app, ["train", "all", "--help"])
     assert result.exit_code == 0
     assert "--model" in unstyle(result.stdout)
+
+
+def _write_chat_jsonl(path: Path, count: int) -> None:
+    """Write count distinct chat records to a JSONL file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for i in range(count):
+            record = {
+                "messages": [
+                    {"role": "user", "content": f"q{i}"},
+                    {"role": "assistant", "content": f"a{i}"},
+                ]
+            }
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _argument_after(command: object, flag: str) -> str:
+    assert isinstance(command, list)
+    assert flag in command
+    return str(command[command.index(flag) + 1])
+
+
+def test_train_all_creates_valid_split_before_training(tmp_path: Path) -> None:
+    train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
+    _write_chat_jsonl(train_path, 40)
+    fake_sequence = [
+        ("fake/repo", "default", train_path, tmp_path / "adapters" / "01-stage")
+    ]
+    captured_subprocess.clear()
+    with (
+        patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
+        patch.object(
+            train_module.subprocess, "run", side_effect=capture_subprocess_call
+        ),
+    ):
+        result = runner.invoke(app, ["train", "all", "--model", "m"])
+    assert result.exit_code == 0
+
+    valid_path = train_path.parent / "valid.jsonl"
+    assert valid_path.is_file()
+    assert valid_path.stat().st_size > 0
+    train_lines = len(train_path.read_text(encoding="utf-8").splitlines())
+    valid_lines = len(valid_path.read_text(encoding="utf-8").splitlines())
+    assert train_lines + valid_lines == 40
+
+    command = captured_subprocess["command"]
+    assert _argument_after(command, "--data") == str(train_path.parent)
+    assert _argument_after(command, "--iters") == str(train_lines)
+
+
+def test_train_all_skips_split_when_valid_present(tmp_path: Path) -> None:
+    train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
+    _write_chat_jsonl(train_path, 40)
+    valid_path = train_path.parent / "valid.jsonl"
+    _write_chat_jsonl(valid_path, 2)
+    valid_before = valid_path.read_text(encoding="utf-8")
+
+    fake_sequence = [
+        ("fake/repo", "default", train_path, tmp_path / "adapters" / "01-stage")
+    ]
+    captured_subprocess.clear()
+    with (
+        patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
+        patch.object(
+            train_module.subprocess, "run", side_effect=capture_subprocess_call
+        ),
+    ):
+        result = runner.invoke(app, ["train", "all", "--model", "m"])
+    assert result.exit_code == 0
+
+    assert valid_path.read_text(encoding="utf-8") == valid_before
+    command = captured_subprocess["command"]
+    assert _argument_after(command, "--iters") == "40"
