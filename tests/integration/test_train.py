@@ -207,7 +207,9 @@ def test_train_all_creates_valid_split_before_training(
     with (
         patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
         patch.object(
-            train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
+            train_module.subprocess,
+            "run",
+            side_effect=make_capture(captured_subprocess),
         ),
     ):
         result = runner.invoke(app, ["train", "all", "--model", "m"])
@@ -240,7 +242,9 @@ def test_train_all_skips_split_when_valid_present(
     with (
         patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
         patch.object(
-            train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
+            train_module.subprocess,
+            "run",
+            side_effect=make_capture(captured_subprocess),
         ),
     ):
         result = runner.invoke(app, ["train", "all", "--model", "m"])
