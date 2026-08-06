@@ -17,76 +17,76 @@ mlx_core = pytest.importorskip("mlx.core")
 
 run = importlib.import_module("hone.run")
 DEVICES = run.DEVICES
-gpu_info = run.gpu_info
-has_metal = run.has_metal
-read_device = run.read_device
-setup_device = run.setup_device
+gpu = run.gpu
+metal = run.metal
+device = run.device
+select = run.select
 
 
-def test_read_device_defaults_to_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_device_defaults_to_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HONE_DEVICE", raising=False)
-    assert read_device() == "gpu"
+    assert device() == "gpu"
 
 
-def test_read_device_reads_env_case_insensitively(
+def test_device_reads_env_case_insensitively(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HONE_DEVICE", "CPU")
-    assert read_device() == "cpu"
+    assert device() == "cpu"
     monkeypatch.setenv("HONE_DEVICE", "GPU")
-    assert read_device() == "gpu"
+    assert device() == "gpu"
 
 
-def test_read_device_rejects_unsupported_value(
+def test_device_rejects_unsupported_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HONE_DEVICE", "tpu")
     with pytest.raises(ValueError, match="HONE_DEVICE must be one of"):
-        read_device()
+        device()
 
 
-def test_setup_device_installs_cpu_when_requested(
+def test_select_installs_cpu_when_requested(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HONE_DEVICE", "cpu")
     original = mlx_core.default_device()
     try:
-        setup_device(logging.getLogger("test"))
+        select(logging.getLogger("test"))
         assert mlx_core.default_device() == mlx_core.Device(mlx_core.DeviceType.cpu, 0)
     finally:
         mlx_core.set_default_device(original)
 
 
-def test_setup_device_installs_gpu_when_requested_and_metal_available(
+def test_select_installs_gpu_when_requested_and_metal_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HONE_DEVICE", "gpu")
-    if not has_metal():
+    if not metal():
         pytest.skip("Metal is not available on this host")
     original = mlx_core.default_device()
     try:
-        setup_device(logging.getLogger("test"))
+        select(logging.getLogger("test"))
         assert mlx_core.default_device() == mlx_core.Device(mlx_core.DeviceType.gpu, 0)
     finally:
         mlx_core.set_default_device(original)
 
 
-def test_setup_device_refuses_gpu_when_metal_unavailable(
+def test_select_refuses_gpu_when_metal_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HONE_DEVICE", "gpu")
-    monkeypatch.setattr(run, "has_metal", lambda: False)
+    monkeypatch.setattr(run, "metal", lambda: False)
     original = mlx_core.default_device()
     try:
         with pytest.raises(RuntimeError, match="Metal is unavailable"):
-            setup_device(logging.getLogger("test"))
+            select(logging.getLogger("test"))
     finally:
         mlx_core.set_default_device(original)
 
 
 def test_setup_logs_device_info() -> None:
     logger = logging.getLogger("test.device_info")
-    setup_device(logger)
+    select(logger)
     assert logger.level <= logging.INFO
 
 

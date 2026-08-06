@@ -23,22 +23,20 @@ from hone.log import setup
 DEVICES: frozenset[str] = frozenset({"cpu", "gpu"})
 
 
-def read_device() -> str:
+def device() -> str:
     """Return the device name requested by HONE_DEVICE."""
-    device_name = os.environ.get("HONE_DEVICE", "gpu").lower()
-    if device_name not in DEVICES:
-        raise ValueError(
-            f"HONE_DEVICE must be one of {sorted(DEVICES)}, got {device_name!r}"
-        )
-    return device_name
+    name = os.environ.get("HONE_DEVICE", "gpu").lower()
+    if name not in DEVICES:
+        raise ValueError(f"HONE_DEVICE must be one of {sorted(DEVICES)}, got {name!r}")
+    return name
 
 
-def has_metal() -> bool:
+def metal() -> bool:
     """Return whether MLX can drive a Metal GPU on this host."""
     return bool(getattr(mx.metal, "is_available", lambda: False)())
 
 
-def gpu_info() -> dict[str, Any]:
+def gpu() -> dict[str, Any]:
     """Return the active GPU device info across MLX versions.
 
     Newer MLX exposes mx.device_info; older releases only expose
@@ -50,7 +48,7 @@ def gpu_info() -> dict[str, Any]:
     return dict(mx.metal.device_info())
 
 
-def setup_device(logger: logging.Logger) -> None:
+def select(logger: logging.Logger) -> None:
     """Select and verify the MLX device requested by HONE_DEVICE.
 
     The selected device is installed as the MLX default and the
@@ -59,9 +57,9 @@ def setup_device(logger: logging.Logger) -> None:
     GPU is requested but Metal is unavailable, so the pipeline
     never silently degrades to CPU.
     """
-    device_name = read_device()
-    if device_name == "gpu":
-        if not has_metal():
+    name = device()
+    if name == "gpu":
+        if not metal():
             raise RuntimeError(
                 "HONE_DEVICE=gpu was requested but Metal is unavailable "
                 "on this host. This pipeline targets Apple Silicon; either "
@@ -74,9 +72,9 @@ def setup_device(logger: logging.Logger) -> None:
         device_type = mx.DeviceType.cpu
         device_label = "CPU"
     mx.set_default_device(mx.Device(device_type, 0))
-    logger.info("MLX device: %s (HONE_DEVICE=%s)", device_label, device_name)
-    if device_name == "gpu":
-        info = gpu_info()
+    logger.info("MLX device: %s (HONE_DEVICE=%s)", device_label, name)
+    if name == "gpu":
+        info = gpu()
         memory_size = info.get("memory_size", 0)
         logger.info(
             "Metal device: %s, memory=%d bytes, architecture=%s",
@@ -89,7 +87,7 @@ def setup_device(logger: logging.Logger) -> None:
 def main() -> None:
     """Configure the device, then delegate to the MLX LoRA CLI."""
     logger = setup(verbose=False)
-    setup_device(logger)
+    select(logger)
     from mlx_lm.lora import main as mlx_lora_main
 
     mlx_lora_main()
