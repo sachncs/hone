@@ -118,7 +118,7 @@ def code(
         solution = str(row.get("solution", row.get("answer", ""))).strip()
         if len(question) < 80 or len(solution) < 20:
             continue
-        item: dict[str, object] = {
+        record: dict[str, object] = {
             "messages": [
                 {
                     "role": "user",
@@ -132,11 +132,11 @@ def code(
         }
         seen += 1
         if len(reservoir) < max_samples:
-            reservoir.append(item)
+            reservoir.append(record)
         else:
             index = rng.randrange(seen)
             if index < max_samples:
-                reservoir[index] = item
+                reservoir[index] = record
         if seen >= scan_limit:
             break
     if len(reservoir) < 2:
@@ -200,12 +200,12 @@ def swe(
     normalizer = SweNormalizer()
     for row in rows:
         try:
-            item = normalizer.normalize(row)
+            example = normalizer.normalize(row)
         except ValueError:
             continue
-        if item.character_count > max_chars:
+        if example.character_count > max_chars:
             continue
-        converted.append(item)
+        converted.append(example)
         if max_samples and len(converted) >= max_samples:
             break
     if len(converted) < 2:
@@ -254,11 +254,11 @@ def all_cmd(
         raw_messages = row.get("messages")
         if isinstance(raw_messages, list):
             out = []
-            for item in raw_messages:
-                if not isinstance(item, dict):
+            for message in raw_messages:
+                if not isinstance(message, dict):
                     return None
-                role = role_map.get(str(item.get("role", "")).lower())
-                content = item.get("content")
+                role = role_map.get(str(message.get("role", "")).lower())
+                content = message.get("content")
                 if role is None or content is None:
                     return None
                 content = str(content).strip()
@@ -314,17 +314,17 @@ def all_cmd(
             dataset = load_dataset(repo, name=config, split=split, streaming=True)
             for row in dataset:
                 try:
-                    item = (
+                    record = (
                         codeforces_text(row)
                         if mode == "codeforces-text"
                         else as_sft(row)
                     )
                 except ValueError:
-                    item = None
-                if item is None:
+                    record = None
+                if record is None:
                     skipped += 1
                     continue
-                handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 written += 1
                 if written % 100000 == 0:
                     logger.info("written=%d skipped=%d", written, skipped)
