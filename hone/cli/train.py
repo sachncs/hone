@@ -10,6 +10,7 @@ from pathlib import Path
 import typer
 
 from hone.log import setup
+from hone.split import split_file
 
 app: typer.Typer = typer.Typer(help="Train adapters.", no_args_is_help=True)
 
@@ -110,7 +111,21 @@ def all_cmd(
         if not data_path.is_file() or data_path.stat().st_size == 0:
             raise typer.BadParameter(f"dataset missing after prepare: {data_path}")
 
-        iters = max(1, sum(1 for _ in data_path.open(encoding="utf-8")) - 1)
+        valid_path = data_path.parent / "valid.jsonl"
+        fresh_valid = valid_path.is_file() and valid_path.stat().st_size > 0
+        if not fresh_valid or data_path.stat().st_mtime > valid_path.stat().st_mtime:
+            train_count, valid_count = split_file(
+                data_path, data_path, valid_path, ratio=0.05, seed=42
+            )
+            logger.info(
+                "split %d train and %d valid from %s",
+                train_count,
+                valid_count,
+                data_path.parent,
+            )
+        else:
+            train_count = sum(1 for _ in data_path.open(encoding="utf-8"))
+        iters = max(1, train_count)
         args = [
             "--model",
             model,
