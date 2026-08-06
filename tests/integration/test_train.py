@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -78,28 +78,32 @@ def test_train_code_refuses_unknown_backend(tmp_path: Path) -> None:
     assert "backend" in result.output.lower()
 
 
-captured_subprocess: dict[str, object] = {}
+@pytest.fixture
+def captured_subprocess() -> dict[str, object]:
+    return {}
 
 
-def capture_subprocess_call(
-    *args: Any, **kwargs: Any
-) -> subprocess.CompletedProcess[str]:
-    """Module-level fake for subprocess.run that records args and env."""
-    command: Sequence[str] = kwargs.get("args", args[0] if args else [])
-    env: dict[str, str] = kwargs.get("env", {})
-    captured_subprocess["command"] = command
-    captured_subprocess["env"] = env
-    return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+def make_capture(
+    target: dict[str, object],
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    def capture(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Fake subprocess.run that records args and env into `target`."""
+        command: Sequence[str] = kwargs.get("args", args[0] if args else [])
+        env: dict[str, str] = kwargs.get("env", {})
+        target["command"] = command
+        target["env"] = env
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    return capture
 
 
 def test_train_code_sets_hone_device_and_invokes_subprocess(
-    tmp_path: Path,
+    tmp_path: Path, captured_subprocess: dict[str, object]
 ) -> None:
     config = tmp_path / "code.yaml"
     config.write_text("model: m\ntrain: true\ndata: d\n", encoding="utf-8")
-    captured_subprocess.clear()
     with patch.object(
-        train_module.subprocess, "run", side_effect=capture_subprocess_call
+        train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
     ):
         result = runner.invoke(
             app,
@@ -118,13 +122,12 @@ def test_train_code_sets_hone_device_and_invokes_subprocess(
 
 
 def test_train_swe_sets_hone_device_and_invokes_subprocess(
-    tmp_path: Path,
+    tmp_path: Path, captured_subprocess: dict[str, object]
 ) -> None:
     config = tmp_path / "swe.yaml"
     config.write_text("model: m\ntrain: true\ndata: d\n", encoding="utf-8")
-    captured_subprocess.clear()
     with patch.object(
-        train_module.subprocess, "run", side_effect=capture_subprocess_call
+        train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
     ):
         result = runner.invoke(
             app,
@@ -193,17 +196,18 @@ def argument_after(command: object, flag: str) -> str:
     return str(command[command.index(flag) + 1])
 
 
-def test_train_all_creates_valid_split_before_training(tmp_path: Path) -> None:
+def test_train_all_creates_valid_split_before_training(
+    tmp_path: Path, captured_subprocess: dict[str, object]
+) -> None:
     train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
     write_chat_jsonl(train_path, 40)
     fake_sequence = [
         ("fake/repo", "default", train_path, tmp_path / "adapters" / "01-stage")
     ]
-    captured_subprocess.clear()
     with (
         patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
         patch.object(
-            train_module.subprocess, "run", side_effect=capture_subprocess_call
+            train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
         ),
     ):
         result = runner.invoke(app, ["train", "all", "--model", "m"])
@@ -221,7 +225,9 @@ def test_train_all_creates_valid_split_before_training(tmp_path: Path) -> None:
     assert argument_after(command, "--iters") == str(train_lines)
 
 
-def test_train_all_skips_split_when_valid_present(tmp_path: Path) -> None:
+def test_train_all_skips_split_when_valid_present(
+    tmp_path: Path, captured_subprocess: dict[str, object]
+) -> None:
     train_path = tmp_path / "data" / "01-stage" / "train.jsonl"
     write_chat_jsonl(train_path, 40)
     valid_path = train_path.parent / "valid.jsonl"
@@ -231,11 +237,10 @@ def test_train_all_skips_split_when_valid_present(tmp_path: Path) -> None:
     fake_sequence = [
         ("fake/repo", "default", train_path, tmp_path / "adapters" / "01-stage")
     ]
-    captured_subprocess.clear()
     with (
         patch.object(train_module, "FULL_SEQUENCE", fake_sequence),
         patch.object(
-            train_module.subprocess, "run", side_effect=capture_subprocess_call
+            train_module.subprocess, "run", side_effect=make_capture(captured_subprocess)
         ),
     ):
         result = runner.invoke(app, ["train", "all", "--model", "m"])
