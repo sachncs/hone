@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from hone.model import Example, Message, Role
-from hone.split import MIN_VALID, Splitter
+from hone.split import MIN_VALID, Splitter, split_file
 
 
 def make_examples(count: int) -> list[Example]:
@@ -19,6 +22,24 @@ def make_examples(count: int) -> list[Example]:
         )
         for i in range(count)
     ]
+
+
+def make_jsonl(path: Path, count: int) -> None:
+    """Write count distinct chat records to a JSONL file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for i in range(count):
+            record = {
+                "messages": [
+                    {"role": "user", "content": f"q{i}"},
+                    {"role": "assistant", "content": f"a{i}"},
+                ]
+            }
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def read_lines(path: Path) -> list[str]:
+    return path.read_text(encoding="utf-8").splitlines()
 
 
 def test_splitter_rejects_ratio_zero() -> None:
@@ -88,3 +109,133 @@ def test_splitter_preserves_all_elements() -> None:
     assert len(train) + len(valid) == len(examples)
     recovered = train + valid
     assert sorted(id(e) for e in recovered) == sorted(id(e) for e in examples)
+
+
+def test_split_file_returns_counts(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 40)
+    train_count, valid_count = split_file(
+        source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.05, seed=42
+    )
+    assert (train_count, valid_count) == (38, 2)
+
+
+def test_split_file_preserves_all_lines_byte_identical(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 40)
+    split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, seed=42)
+    recovered = read_lines(tmp_path / "train.jsonl") + read_lines(
+        tmp_path / "valid.jsonl"
+    )
+    assert sorted(recovered) == sorted(read_lines(source))
+
+
+def test_split_file_partitions_are_disjoint(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 40)
+    split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, seed=42)
+    train = set(read_lines(tmp_path / "train.jsonl"))
+    valid = set(read_lines(tmp_path / "valid.jsonl"))
+    assert train.isdisjoint(valid)
+
+
+def test_split_file_same_seed_produces_same_split(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 40)
+    split_file(
+        source, tmp_path / "a" / "train.jsonl", tmp_path / "a" / "valid.jsonl", 0.1, 42
+    )
+    split_file(
+        source, tmp_path / "b" / "train.jsonl", tmp_path / "b" / "valid.jsonl", 0.1, 42
+    )
+    assert read_lines(tmp_path / "a" / "train.jsonl") == read_lines(
+        tmp_path / "b" / "train.jsonl"
+    )
+    assert read_lines(tmp_path / "a" / "valid.jsonl") == read_lines(
+        tmp_path / "b" / "valid.jsonl"
+    )
+
+
+def test_split_file_different_seeds_produce_different_splits(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 50)
+    split_file(
+        source, tmp_path / "a" / "train.jsonl", tmp_path / "a" / "valid.jsonl", 0.1, 42
+    )
+    split_file(
+        source, tmp_path / "b" / "train.jsonl", tmp_path / "b" / "valid.jsonl", 0.1, 43
+    )
+    assert read_lines(tmp_path / "a" / "valid.jsonl") != read_lines(
+        tmp_path / "b" / "valid.jsonl"
+    )
+
+
+def test_split_file_valid_has_at_least_min_valid(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 2)
+    train_count, valid_count = split_file(
+        source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.05, seed=42
+    )
+    assert valid_count >= MIN_VALID
+    assert (train_count, valid_count) == (1, 1)
+
+
+def test_split_file_ratio_near_one_keeps_train_nonempty(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 5)
+    train_count, valid_count = split_file(
+        source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.99, seed=42
+    )
+    assert train_count >= 1
+    assert train_count + valid_count == 5
+
+
+def test_split_file_rejects_ratio_zero(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 10)
+    with pytest.raises(ValueError, match="ratio must be between"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.0, 42)
+
+
+def test_split_file_rejects_ratio_one(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 10)
+    with pytest.raises(ValueError, match="ratio must be between"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 1.0, 42)
+
+
+def test_split_file_rejects_negative_ratio(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 10)
+    with pytest.raises(ValueError, match="ratio must be between"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", -0.1, 42)
+
+
+def test_split_file_rejects_ratio_above_one(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 10)
+    with pytest.raises(ValueError, match="ratio must be between"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 1.5, 42)
+
+
+def test_split_file_rejects_single_line(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 1)
+    with pytest.raises(ValueError, match="at least two JSON lines"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, 42)
+
+
+def test_split_file_rejects_malformed_line(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 3)
+    with source.open("a", encoding="utf-8") as handle:
+        handle.write("this is not json\n")
+    with pytest.raises(ValueError, match=r":4:"):
+        split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, 42)
+
+
+def test_split_file_leaves_no_tmp_files(tmp_path: Path) -> None:
+    source = tmp_path / "source.jsonl"
+    make_jsonl(source, 40)
+    split_file(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, 42)
+    assert list(tmp_path.glob("*.tmp")) == []
