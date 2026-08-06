@@ -15,7 +15,7 @@ from hone.split import partition
 app: typer.Typer = typer.Typer(help="Train adapters.", no_args_is_help=True)
 
 
-def _run_mlx(config: Path, device: str) -> int:
+def invoke_mlx(config: Path, device: str) -> int:
     """Invoke python -m hone.run with HONE_DEVICE set; return exit code."""
     logger = setup(verbose=False)
     environment = os.environ.copy()
@@ -31,7 +31,7 @@ def _run_mlx(config: Path, device: str) -> int:
     return completed.returncode
 
 
-def _run_cuda(config: Path) -> int:
+def invoke_cuda(config: Path) -> int:
     """Invoke the Unsloth/CUDA training path; placeholder for Phase 3.10."""
     raise NotImplementedError("CUDA backend (Unsloth) is implemented in T3.10")
 
@@ -51,9 +51,9 @@ def code(
     if not config_path.is_file():
         raise typer.BadParameter(f"config not found: {config_path}")
     if backend == "mlx":
-        exit_code = _run_mlx(config_path, device)
+        exit_code = invoke_mlx(config_path, device)
     else:
-        exit_code = _run_cuda(config_path)
+        exit_code = invoke_cuda(config_path)
     raise typer.Exit(code=exit_code)
 
 
@@ -72,9 +72,9 @@ def swe(
     if not config_path.is_file():
         raise typer.BadParameter(f"config not found: {config_path}")
     if backend == "mlx":
-        exit_code = _run_mlx(config_path, device)
+        exit_code = invoke_mlx(config_path, device)
     else:
-        exit_code = _run_cuda(config_path)
+        exit_code = invoke_cuda(config_path)
     raise typer.Exit(code=exit_code)
 
 
