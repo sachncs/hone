@@ -38,4 +38,4 @@ echo "==> full training sequence"
 echo "    log: $LOG_FILE"
 echo
 
-uv run hone train all "$@" 2>&1 | tee "$LOG_FILE"
+uv run --extra mlx hone train all "$@" 2>&1 | tee "$LOG_FILE"

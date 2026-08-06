@@ -97,13 +97,17 @@ def all_cmd(
 
     previous_adapter: Path | None = None
     for repo, configs, data_path, adapter in FULL_SEQUENCE:
-        if not data_path.exists():
+        if not data_path.is_file() or data_path.stat().st_size == 0:
             logger.info("preparing %s", data_path)
             mode = "codeforces-text" if "codeforces" in repo else "sft"
             prepare.all_cmd(
-                repo=repo, configs=configs, output=str(data_path), mode=mode
+                repo=repo,
+                configs=configs,
+                split="train",
+                output=str(data_path),
+                mode=mode,
             )
-        if not data_path.is_file():
+        if not data_path.is_file() or data_path.stat().st_size == 0:
             raise typer.BadParameter(f"dataset missing after prepare: {data_path}")
 
         iters = max(1, sum(1 for _ in data_path.open(encoding="utf-8")) - 1)
