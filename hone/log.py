@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 LOGGER: str = "hone"
-_FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def setup(verbose: bool = False) -> logging.Logger:
@@ -17,11 +17,11 @@ def setup(verbose: bool = False) -> logging.Logger:
     log lines.
     """
     logger = logging.getLogger(LOGGER)
-    for handler in list(logger.handlers):
-        logger.removeHandler(handler)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(_FORMAT))
-    logger.addHandler(handler)
+    for sink in list(logger.handlers):
+        logger.removeHandler(sink)
+    sink = logging.StreamHandler()
+    sink.setFormatter(logging.Formatter(FORMAT))
+    logger.addHandler(sink)
     logger.propagate = False
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     return logger
