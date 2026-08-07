@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   split of a JSONL file with memory bounded by the validation size.
 - `click` is now listed in the `[dev]` extra so the test suite
   imports it without a manual install step.
+- `hone prepare all --max-tokens N` drops records whose token count
+  exceeds `N` so the long tail of an HF dataset cannot produce
+  empty loss targets after `--max-seq-length` truncation. The
+  tokenizer is loaded via `mlx_lm.tokenizer_utils.AutoTokenizer`,
+  which is bundled with the `[mlx]` extra — no new dep required.
+- `configs/smoke-kimi.yaml`: a 50-iter smoke config for the kimi
+  stage, runnable via `setup.sh` (auto-skipped when
+  `data/full/kimi/train.jsonl` is absent). Uses
+  `openbmb/MiniCPM5-1B` to match the production training path.
 
 ### Changed
 - Renamed public API to comply with the single-word identifier
@@ -35,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `messages_strategy` → `messages`, `example_strategy` → `example`,
   `chat_record_strategy` → `chat_record`,
   `message_strategy` → `message`).
+- `configs/code.yaml` and `configs/swe.yaml`: bumped
+  `learning_rate` to `2e-5`. The previous `1e-5` / `8e-6` defaults
+  produced `Train loss nan` early in long-sequence stages.
 
 ### Fixed
 - `hone train all` now creates a deterministic 5% validation split
@@ -44,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `hone.split.partition` previously called `write()` with mismatched
   keyword arguments (`train_path`, `valid_path`) that did not match
   the helper's positional signature.
+- `hone prepare all` rejects rows whose prompt or completion is
+  empty after stripping, both for chat-style `messages` rows and
+  for `prompt`/`completion` rows. Previously these slipped through
+  and surfaced as a confusing "content cannot be empty" error from
+  `Example.__post_init__` downstream.
+- `hone.jsonl.Reader` now raises `path:line_number:messages[i].content
+  is empty` with file/line context when an empty-content row is
+  encountered, instead of a bare `ValueError` from `Message`.
 
 ## [0.2.0] - 2026-08-03
 

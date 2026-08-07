@@ -16,9 +16,8 @@ M-series unified-memory architecture, it uses
 [MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA out of
 the box and falls back to a CUDA/Unsloth path on NVIDIA hosts.
 
-This is a fine-tuning pipeline for Apple Silicon. The default model
-reference is `openbmb/MiniCPM5-1B`; the quantized MLX form
-(`mlx-community/MiniCPM5-1B-4bit`) is used only for inference. The
+This is a fine-tuning pipeline for Apple Silicon. The model used
+for both training and validation is `openbmb/MiniCPM5-1B`. The
 data contract is a plain JSONL of chat messages or
 `prompt`/`completion` pairs; the CLI is a single `hone` binary with
 five top-level subcommands (`prepare`, `train`, `generate`,
@@ -121,6 +120,20 @@ Reads JSONL, normalizes each line to a chat record, splits 95/5 with
 seed 42, writes `train.jsonl` and `valid.jsonl` under the output
 directory.
 
+For HF-config corpora that mix very long sequences (e.g. KIMI's
+general-distillation + STEM configs reach 10000+ tokens per row), pass
+`--max-tokens` to drop the long tail before training:
+
+```bash
+hone prepare all --repo ianncity/KIMI-K2.5-1000000x \
+    --configs General-Distillation,PHD-Science,General-Math,MultilingualSTEM \
+    --max-tokens 4096 \
+    --output data/full/kimi/train.jsonl
+```
+
+Records longer than the cap are skipped at prepare time, before they
+can produce empty loss targets after `--max-seq-length` truncation.
+
 ### Train (Apple Silicon, MLX)
 
 ```bash
@@ -129,6 +142,17 @@ hone train code
 
 Reads `configs/code.yaml`, invokes `python -m hone.run` with
 `HONE_DEVICE=gpu`, and writes the adapter to `artifacts/code-lora/`.
+
+Before launching the multi-day full sequence, validate that a small
+kimi subset trains without NaN losses:
+
+```bash
+./train.sh --layers 4 --seq-len 2048   # smoke training run
+```
+
+Or run the dedicated `configs/smoke-kimi.yaml` against an already-prepared
+`data/full/kimi/train.jsonl` to confirm the data pipeline produced
+clean records.
 
 ### Generate
 
@@ -262,6 +286,15 @@ uv run pytest -m "not mlx"           # Linux-compatible
 uv run pytest tests/property/         # hypothesis property tests
 uv run pytest tests/mlx/              # MLX-device tests (skipped on Linux)
 ```
+
+Before a multi-day run, smoke-test the kimi data path:
+
+```bash
+HONE_DEVICE=gpu uv run hone train code --config configs/smoke-kimi.yaml --device gpu
+```
+
+Expect finite train loss and stable val loss within 50 iters; abort
+the multi-day run if the smoke run produces `nan` or `0.000` losses.
 
 The current collection size is reported by `pytest --collect-only`.
 The suite covers every public API: behavior, edge cases, invalid

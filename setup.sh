@@ -8,8 +8,9 @@
 # Env:
 #   PYTHON_VERSION (default 3.12)
 #   HONE_DEVICE    (default cpu)
-#   HONE_SKIP_SMOKE=1   skip the smoke training job
-#   HONE_SKIP_TESTS=1   skip pytest
+#   HONE_SKIP_SMOKE=1       skip the smoke training job
+#   HONE_SKIP_SMOKE_KIMI=1  skip the kimi smoke training job
+#   HONE_SKIP_TESTS=1       skip pytest
 
 set -euo pipefail
 
@@ -40,6 +41,13 @@ if [[ "${HONE_SKIP_SMOKE:-0}" != "1" ]]; then
     echo "==> smoke training (configs/smoke.yaml, HONE_DEVICE=$HONE_DEVICE)"
     HONE_DEVICE="$HONE_DEVICE" uv run hone train code \
         --config configs/smoke.yaml \
+        --device "$HONE_DEVICE"
+fi
+
+if [[ "${HONE_SKIP_SMOKE_KIMI:-0}" != "1" && -f data/full/kimi/train.jsonl ]]; then
+    echo "==> smoke-kimi (configs/smoke-kimi.yaml, HONE_DEVICE=$HONE_DEVICE)"
+    HONE_DEVICE="$HONE_DEVICE" uv run hone train code \
+        --config configs/smoke-kimi.yaml \
         --device "$HONE_DEVICE"
 fi
 
