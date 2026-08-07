@@ -17,9 +17,21 @@
 # starting; intermediate artifacts under artifacts/full/ are
 # reused on resume.
 #
+# Recommended flags:
+#   --max-tokens 4096     pass to 'hone prepare all' (via the data
+#                         stage invoked inside train.sh) to drop
+#                         records longer than the training window.
+#                         Without this, sequences longer than
+#                         --seq-len are truncated silently and can
+#                         produce empty loss targets (NaN).
+#   --seq-len 4096        caps attention cost. 8192 is the upstream
+#                         default but quadruples attention time vs
+#                         4096 and can blow past the M3 Pro's 18 GB
+#                         unified memory with mixed-length batches.
+#
 # Usage:
-#   ./train.sh                       # run all 5 stages with defaults
-#   ./train.sh --layers 4 --seq-len 2048   # pass flags through
+#   ./train.sh                            # run all 5 stages with defaults
+#   ./train.sh --layers 4 --seq-len 4096  # pass flags through
 #
 # Output:
 #   artifacts/full/{01-kimi,02-codex,03-ling,04-codeforces,05-rstar}/
@@ -36,6 +48,7 @@ LOG_FILE="$LOG_DIR/train-$(date +%Y%m%d-%H%M%S).log"
 
 echo "==> full training sequence"
 echo "    log: $LOG_FILE"
+echo "    recommendation: prepare with --max-tokens 4096 to avoid NaN losses"
 echo
 
 uv run --extra mlx hone train all "$@" 2>&1 | tee "$LOG_FILE"

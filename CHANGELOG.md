@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `configs/code.yaml` and `configs/swe.yaml`: bumped
   `learning_rate` to `2e-5`. The previous `1e-5` / `8e-6` defaults
   produced `Train loss nan` early in long-sequence stages.
+- `hone train all --seq-len` default lowered from `8192` to `4096`.
+  8192 quadruples attention cost and risks OOM on the M3 Pro's 18 GB
+  unified memory with mixed-length batches. Pair with
+  `hone prepare all --max-tokens 4096` to drop long-tail records
+  upstream.
 
 ### Fixed
 - `hone train all` now creates a deterministic 5% validation split

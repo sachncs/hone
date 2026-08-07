@@ -83,10 +83,24 @@ def all_cmd(
     model: str = typer.Option("openbmb/MiniCPM5-1B", "--model"),
     layers: int = typer.Option(16, "--layers"),
     accum: int = typer.Option(32, "--accum"),
-    seq_len: int = typer.Option(8192, "--seq-len"),
+    seq_len: int = typer.Option(
+        4096,
+        "--seq-len",
+        help="Max sequence length; 4096 is the recommended default for the M3 Pro "
+        "(18 GB unified memory). 8192 quadruples attention cost and risks OOM "
+        "with mixed-length batches. Pair with 'hone prepare all --max-tokens N' "
+        "where N <= seq_len to drop long-tail records upstream.",
+    ),
     save_every: int = typer.Option(100000, "--save-every"),
 ) -> None:
-    """Run the full training sequence across every dataset."""
+    """Run the full training sequence across every dataset.
+
+    The defaults assume data has been pre-filtered via 'hone prepare all
+    --max-tokens 4096' (or smaller). Sequences longer than --seq-len
+    are truncated by mlx_lm; if a long prompt pushes the completion
+    out of the window the loss target is empty and the cross-entropy
+    becomes NaN.
+    """
     from hone.cli import prepare
 
     logger = setup(verbose=False)
