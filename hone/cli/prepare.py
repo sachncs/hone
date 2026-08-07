@@ -227,10 +227,22 @@ def all_cmd(
     split: str = typer.Option("train", "--split"),
     output: str = typer.Option(..., "--output", help="Output JSONL path."),
     mode: str = typer.Option("sft", "--mode", help="sft or codeforces-text."),
+    max_tokens: int = typer.Option(
+        0,
+        "--max-tokens",
+        help="Drop records whose token count exceeds this value; 0 disables.",
+    ),
+    tokenizer_model: str = typer.Option(
+        "openbmb/MiniCPM5-1B",
+        "--tokenizer-model",
+        help="HF model id used for token-count filtering.",
+    ),
 ) -> None:
     """Materialize every row of an HF config as MLX JSONL."""
     if mode not in {"sft", "codeforces-text"}:
         raise typer.BadParameter("--mode must be 'sft' or 'codeforces-text'")
+    if max_tokens < 0:
+        raise typer.BadParameter("--max-tokens must be non-negative")
 
     from datasets import load_dataset
 
@@ -241,6 +253,15 @@ def all_cmd(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     skipped = 0
+    filtered_long = 0
+    tokenizer = None
+    if max_tokens > 0:
+        from mlx_lm.tokenizer_utils import AutoTokenizer
+
+        logger.info("loading tokenizer %s for length filtering", tokenizer_model)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_model, trust_remote_code=True
+        )
 
     def as_sft(row: dict[str, object]) -> dict[str, object] | None:
         role_map = {
@@ -309,6 +330,22 @@ def all_cmd(
             raise ValueError("row has no serializable problem text")
         return {"text": text}
 
+    def token_count(record: dict[str, object]) -> int:
+        if "messages" in record:
+            messages = record["messages"]
+            messages_list = messages if isinstance(messages, list) else []
+            text = "\n".join(
+                str(message["content"])
+                for message in messages_list
+                if isinstance(message, dict)
+            )
+        elif "text" in record:
+            text = str(record["text"])
+        else:
+            return 0
+        assert tokenizer is not None
+        return len(tokenizer.encode(text, add_special_tokens=False))
+
     with output_path.open("w", encoding="utf-8") as handle:
         for config in configs.split(","):
             dataset = load_dataset(repo, name=config, split=split, streaming=True)
@@ -324,14 +361,23 @@ def all_cmd(
                 if record is None:
                     skipped += 1
                     continue
+                if tokenizer is not None and token_count(record) > max_tokens:
+                    filtered_long += 1
+                    continue
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 written += 1
                 if written % 100000 == 0:
-                    logger.info("written=%d skipped=%d", written, skipped)
+                    logger.info(
+                        "written=%d skipped=%d filtered_long=%d",
+                        written,
+                        skipped,
+                        filtered_long,
+                    )
     logger.info(
-        "complete: written=%d skipped=%d output=%s",
+        "complete: written=%d skipped=%d filtered_long=%d output=%s",
         written,
         skipped,
+        filtered_long,
         output_path,
     )
 

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.machinery
 import json
 import sys
 import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -32,6 +34,7 @@ def fake_datasets(value: Any) -> Any:
     """
     rows: list[Any] = list(value) if not isinstance(value, list) else value
     module: Any = types.ModuleType("datasets")
+    module.__spec__ = importlib.machinery.ModuleSpec("datasets", loader=None)
 
     def load(*args: Any, **kwargs: Any) -> Any:
         return value if isinstance(value, dict) else iter(rows)
@@ -355,6 +358,85 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
             if line.strip()
         ]
         assert written == rows
+    finally:
+        restore_datasets()
+
+
+def test_prepare_all_filters_records_over_max_tokens(tmp_path: Path) -> None:
+    rows = [
+        {
+            "messages": [
+                {"role": "user", "content": "short"},
+                {"role": "assistant", "content": "ok"},
+            ]
+        },
+        {
+            "messages": [
+                {"role": "user", "content": "x" * 200},
+                {"role": "assistant", "content": "y" * 200},
+            ]
+        },
+    ]
+
+    class FakeTokenizer:
+        def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
+            return list(range(len(text)))
+
+    fake_datasets(value=iter(rows))
+    try:
+        with patch(
+            "mlx_lm.tokenizer_utils.AutoTokenizer.from_pretrained",
+            return_value=FakeTokenizer(),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "prepare",
+                    "all",
+                    "--repo",
+                    "hf/dummy",
+                    "--configs",
+                    "default",
+                    "--output",
+                    str(tmp_path / "out.jsonl"),
+                    "--max-tokens",
+                    "100",
+                    "--tokenizer-model",
+                    "fake/model",
+                ],
+            )
+        assert result.exit_code == 0
+        written = [
+            json.loads(line)
+            for line in (tmp_path / "out.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        assert written == [rows[0]]
+        assert "filtered_long=1" in result.output
+    finally:
+        restore_datasets()
+
+
+def test_prepare_all_rejects_negative_max_tokens(tmp_path: Path) -> None:
+    fake_datasets(value=iter([]))
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "prepare",
+                "all",
+                "--repo",
+                "hf/dummy",
+                "--configs",
+                "default",
+                "--output",
+                str(tmp_path / "out.jsonl"),
+                "--max-tokens",
+                "-5",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "max-tokens" in result.output or "max-tokens" in (result.stderr or "")
     finally:
         restore_datasets()
 
