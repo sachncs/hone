@@ -65,7 +65,12 @@ class Reader:
                 raise ValueError(
                     f"{path}:{line_number}: messages[{index}].role: {error}"
                 ) from error
-            messages.append(Message(role=role, content=str(raw_message["content"])))
+            content = str(raw_message["content"])
+            if not content.strip():
+                raise ValueError(
+                    f"{path}:{line_number}: messages[{index}].content is empty"
+                )
+            messages.append(Message(role=role, content=content))
         metadata: dict[str, JsonScalar] = {
             key: value
             for key, value in record.items()

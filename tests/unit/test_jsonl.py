@@ -144,3 +144,16 @@ def test_reader_rejects_non_object_message_items(tmp_path: Path) -> None:
     path.write_text('{"messages": ["bad"]}\n', encoding="utf-8")
     with pytest.raises(ValueError, match=r"messages\[0\] must be an object"):
         list(Reader().read(path))
+
+
+def test_reader_rejects_empty_message_content(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    path.write_text(
+        '{"messages": ['
+        '{"role": "user", "content": ""}, '
+        '{"role": "assistant", "content": "a"}'
+        "]}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"messages\[0\].content is empty"):
+        list(Reader().read(path))
