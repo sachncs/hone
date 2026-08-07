@@ -362,6 +362,69 @@ def test_prepare_all_writes_valid_messages(tmp_path: Path) -> None:
         restore_datasets()
 
 
+def test_prepare_all_drops_records_with_empty_prompt_or_completion(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "prompt": "real question",
+            "completion": "real answer",
+        },
+        {
+            "prompt": "   ",
+            "completion": "answer only",
+        },
+        {
+            "prompt": "prompt only",
+            "completion": "",
+        },
+        {
+            "messages": [
+                {"role": "user", "content": ""},
+                {"role": "assistant", "content": "ok"},
+            ]
+        },
+        {
+            "messages": [
+                {"role": "user", "content": "ok"},
+                {"role": "assistant", "content": "  \t  "},
+            ]
+        },
+    ]
+    fake_datasets(value=iter(rows))
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "prepare",
+                "all",
+                "--repo",
+                "hf/dummy",
+                "--configs",
+                "default",
+                "--output",
+                str(tmp_path / "out.jsonl"),
+            ],
+        )
+        assert result.exit_code == 0
+        written = [
+            json.loads(line)
+            for line in (tmp_path / "out.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        assert written == [
+            {
+                "messages": [
+                    {"role": "user", "content": "real question"},
+                    {"role": "assistant", "content": "real answer"},
+                ]
+            }
+        ]
+        assert "skipped=4" in result.output
+    finally:
+        restore_datasets()
+
+
 def test_prepare_all_filters_records_over_max_tokens(tmp_path: Path) -> None:
     rows = [
         {

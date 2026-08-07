@@ -304,18 +304,18 @@ def all_cmd(
             ),
             None,
         )
-        if (
-            prompt is not None
-            and answer is not None
-            and not isinstance(answer, (dict, list))
-        ):
-            return {
-                "messages": [
-                    {"role": "user", "content": str(prompt).strip()},
-                    {"role": "assistant", "content": str(answer).strip()},
-                ]
-            }
-        return None
+        if prompt is None or answer is None or isinstance(answer, (dict, list)):
+            return None
+        prompt_text = str(prompt).strip()
+        answer_text = str(answer).strip()
+        if not prompt_text or not answer_text:
+            return None
+        return {
+            "messages": [
+                {"role": "user", "content": prompt_text},
+                {"role": "assistant", "content": answer_text},
+            ]
+        }
 
     def codeforces_text(row: dict[str, object]) -> dict[str, object]:
         fields = [
@@ -325,8 +325,12 @@ def all_cmd(
             ("OUTPUT FORMAT", row.get("output_format")),
             ("EDITORIAL", row.get("editorial")),
         ]
-        text = "\n\n".join(f"## {name}\n{value}" for name, value in fields if value)
-        if not text:
+        text = "\n\n".join(
+            f"## {name}\n{value}".strip()
+            for name, value in fields
+            if value and str(value).strip()
+        )
+        if not text.strip():
             raise ValueError("row has no serializable problem text")
         return {"text": text}
 
