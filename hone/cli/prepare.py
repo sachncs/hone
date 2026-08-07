@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import typer
@@ -232,6 +233,13 @@ def all_cmd(
         "--max-tokens",
         help="Drop records whose token count exceeds this value; 0 disables.",
     ),
+    max_samples: int = typer.Option(
+        0,
+        "--max-samples",
+        help="Stop after this many rows are written; 0 means full pass. "
+        "Useful for capping multi-million-row HF streams to a tractable subset "
+        "for short fine-tune runs.",
+    ),
     tokenizer_model: str = typer.Option(
         "openbmb/MiniCPM5-1B",
         "--tokenizer-model",
@@ -291,7 +299,13 @@ def all_cmd(
         prompt = next(
             (
                 row.get(k)
-                for k in ("prompt", "question", "instruction", "problem")
+                for k in (
+                    "prompt",
+                    "input",
+                    "instruction",
+                    "question",
+                    "problem",
+                )
                 if row.get(k)
             ),
             None,
@@ -299,7 +313,13 @@ def all_cmd(
         answer = next(
             (
                 row.get(k)
-                for k in ("completion", "response", "answer", "solution", "output")
+                for k in (
+                    "completion",
+                    "response",
+                    "output",
+                    "answer",
+                    "solution",
+                )
                 if row.get(k)
             ),
             None,
@@ -351,6 +371,8 @@ def all_cmd(
         return len(tokenizer.encode(text, add_special_tokens=False))
 
     with output_path.open("w", encoding="utf-8") as handle:
+        started = time.monotonic()
+        last_log = started
         for config in configs.split(","):
             dataset = load_dataset(repo, name=config, split=split, streaming=True)
             for row in dataset:
@@ -377,12 +399,32 @@ def all_cmd(
                         skipped,
                         filtered_long,
                     )
+                if max_samples > 0 and written >= max_samples:
+                    logger.info(
+                        "max-samples reached (%d), stopping early", max_samples
+                    )
+                    break
+                if written % 5000 == 0 and time.monotonic() - last_log > 30.0:
+                    logger.info(
+                        "heartbeat: written=%d skipped=%d filtered_long=%d "
+                        "elapsed=%.0fs",
+                        written,
+                        skipped,
+                        filtered_long,
+                        time.monotonic() - started,
+                    )
+                    last_log = time.monotonic()
+            else:
+                continue
+            break
+    elapsed = time.monotonic() - started
     logger.info(
-        "complete: written=%d skipped=%d filtered_long=%d output=%s",
+        "complete: written=%d skipped=%d filtered_long=%d output=%s elapsed=%.1fs",
         written,
         skipped,
         filtered_long,
         output_path,
+        elapsed,
     )
 
 

@@ -425,6 +425,49 @@ def test_prepare_all_drops_records_with_empty_prompt_or_completion(
         restore_datasets()
 
 
+def test_prepare_all_accepts_input_output_schema(tmp_path: Path) -> None:
+    """Datasets like CodeX-7M use {input, output}; as_sft must map them.
+
+    Regression for the bug where Modotte/CodeX rows were silently
+    dropped because `as_sft` did not recognize `input` as a prompt key.
+    """
+    rows = [
+        {"input": "Write fizzbuzz.", "output": "for i in range(1, 16): ..."},
+        {"prompt": "compute fib", "completion": "def fib(n): ..."},
+    ]
+    fake_datasets(value=iter(rows))
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "prepare",
+                "all",
+                "--repo",
+                "hf/dummy",
+                "--configs",
+                "default",
+                "--output",
+                str(tmp_path / "out.jsonl"),
+            ],
+        )
+        assert result.exit_code == 0
+        written = [
+            json.loads(line)
+            for line in (tmp_path / "out.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        assert len(written) == 2
+        assert written[0] == {
+            "messages": [
+                {"role": "user", "content": "Write fizzbuzz."},
+                {"role": "assistant", "content": "for i in range(1, 16): ..."},
+            ]
+        }
+        assert written[1]["messages"][0]["content"] == "compute fib"
+    finally:
+        restore_datasets()
+
+
 def test_prepare_all_filters_records_over_max_tokens(tmp_path: Path) -> None:
     rows = [
         {
