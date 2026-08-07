@@ -8,7 +8,7 @@ batch_size: 1
 grad_accumulation_steps: 8
 iters: 1200
 val_batches: 25
-learning_rate: 0.00001
+learning_rate: 0.00002
 adapter_path: artifacts/code-lora
 save_every: 200
 max_seq_length: 3072
