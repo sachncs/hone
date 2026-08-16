@@ -57,8 +57,10 @@ data/processed/
 data/raw.jsonl
 data/eval/
 data/full/
+data/soup/
 artifacts/
 *.log
+.soup-crashes/
 
 # Internal contributor guide (regenerated per-developer from a template)
 AGENTS.md
