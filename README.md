@@ -1,382 +1,209 @@
 <p align="center">
   <h1 align="center">hone</h1>
-  <p align="center">Apple Silicon supervised fine-tuning pipeline — plug-and-play LoRA training on the M-series Mac.</p>
+  <p align="center">JSONL data preparation for Soup fine-tuning — one config, one command.</p>
   <p align="center">
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.12%7C3.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-    <a href="https://github.com/sachncs/finetune/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/finetune/ci.yml?branch=main" alt="CI"></a>
-    <a href="#installation"><img src="https://img.shields.io/badge/hone-0.2.0-blue" alt="Version"></a>
-    <a href="https://github.com/sachncs/finetune/stargazers"><img src="https://img.shields.io/github/stars/sachncs/finetune" alt="Stars"></a>
+    <a href="https://github.com/sachncs/hone/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/hone/ci.yml?branch=main" alt="CI"></a>
+    <a href="#installation"><img src="https://img.shields.io/badge/hone-0.3.0-blue" alt="Version"></a>
+    <a href="https://github.com/sachncs/hone/stargazers"><img src="https://img.shields.io/github/stars/sachncs/hone" alt="Stars"></a>
   </p>
 </p>
 
-**hone** is a single-word, plug-and-play supervised fine-tuning
-pipeline **for Apple Silicon**. Built and tested on macOS with the
-M-series unified-memory architecture, it uses
-[MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA out of
-the box and falls back to a CUDA/Unsloth path on NVIDIA hosts.
+**hone** prepares the JSONL files that
+[Soup](https://github.com/MakazhanAlpamys/Soup) consumes for
+supervised fine-tuning. The pipeline:
 
-This is a fine-tuning pipeline for Apple Silicon. The model used
-for both training and validation is `openbmb/MiniCPM5-1B`. The
-data contract is a plain JSONL of chat messages or
-`prompt`/`completion` pairs; the CLI is a single `hone` binary with
-five top-level subcommands (`prepare`, `train`, `generate`,
-`tune`, `evaluate`).
+1. streams a HuggingFace dataset (or reads a local JSONL),
+2. normalizes every row to chat format
+   (`{"messages": [{"role", "content"}, ...]}`) or text format
+   (`{"text": "..."}`),
+3. drops rows over a configurable token-length cap so the
+   trainer never sees an empty loss target after truncation,
+4. reservoir-samples competitive-programming corpora, and
+5. writes `train.jsonl` + `valid.jsonl` that Soup loads directly.
 
-The pipeline is fully typed, fully documented (Google-style
-docstrings on every public symbol), and ships with explicit device
-selection (`HONE_DEVICE`) plus fail-fast validation when Metal is
-unavailable on Apple Silicon.
+The training step itself is delegated to Soup. The original
+`hone` MLX/Unsloth driver is preserved as a frozen alternative
+in [`archive/`](archive/) — see
+[`docs/ARCHIVE.md`](docs/ARCHIVE.md) for what it is and how to
+restore it.
 
 > **Author and maintainer**: Sachin
 
 | Concern | Library |
 |---|---|
-| Backend (Apple Silicon) | [MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA |
-| Backend (NVIDIA) | [Unsloth](https://github.com/unslothai/unsloth) with LoRA (optional `[cuda]`) |
-| Soup driver | [Soup](https://github.com/MakazhanAlpamys/Soup) (optional `[soup]`) — one-YAML training via `soup train --backend mlx` |
 | Data format | JSONL (`messages` or `prompt`/`completion`) |
-| CLI | [Typer](https://github.com/tiangolo/typer) |
-| Property tests | [Hypothesis](https://github.com/HypothesisWorks/hypothesis) |
+| HF adapter | [`datasets`](https://huggingface.co/docs/datasets) |
+| Trainer | [Soup](https://github.com/MakazhanAlpamys/Soup) — `pip install "soup-cli[mlx]"` |
+| Optional alt trainer | frozen `archive/hone_mlx/` (MLX + Unsloth, see [`docs/ARCHIVE.md`](docs/ARCHIVE.md)) |
 | Lint / format | ruff |
-| Type check | mypy (strict) |
+| Type check | mypy |
 | Tests | pytest |
-
-## Features
-
-- **Built for Apple Silicon** — `uv pip install -e '.[dev,mlx]'` and `hone train code` runs on the M-series GPU; the launcher detects Metal at startup and refuses to fall back to CPU silently.
-- **Unified-memory aware** — Conservative defaults for 18 GB M3 Pro: 4-bit base model, batch size 1, gradient checkpointing, gradient accumulation instead of memory-heavy batch.
-- **Explicit GPU device selection** — `HONE_DEVICE=gpu|cpu` env var; launcher refuses to start without Metal on Apple Silicon.
-- **Deterministic dataset preparation** — seeded splitter (`Splitter(ratio, seed)`) with provably disjoint partitions.
-- **Reservoir sampling for large corpora** — `hone prepare code` streams HuggingFace datasets with deterministic seed.
-- **HuggingFace-aware** — `hone prepare swe` rejects non-train splits to prevent eval-patch leakage.
-- **Multi-stage training** — `hone train all` orchestrates the full KIMI → CodeX → Ling-Coder → Codeforces sequence with adapter resume.
-- **Hyperparameter search** — `hone tune` runs Cartesian-product trials and selects by validation loss or benchmark metric.
-- **LiveCodeBench evaluation** — `hone evaluate` invokes the official LCB evaluator on a trained adapter.
-- **Soup integration** — one-YAML SFT pipeline (configs/soup-sft-codex-*.yaml + train-soup.sh) trains MiniCPM5-1B-MLX on CodeX with `soup train --backend mlx` and ships the LoRA adapter. ~7.4 GB peak on M3 Pro 18 GB.
-- **Production-grade logging** — every entry point logs via `hone.log`; CLI surfaces exit codes via typer.
-- **No half-private names** — every identifier is public per AGENTS.md; library code raises typed exceptions; CLI converts to exit codes.
-
-## Apple Silicon
-
-hone is targeted at, and primarily developed on, Apple Silicon
-(macOS on M1/M2/M3/M4-series chips with unified memory). The
-MLX backend runs on the Metal GPU; the launcher reads `HONE_DEVICE`
-and refuses to start with `gpu` when Metal is unavailable. The
-default model and the recommended hyperparameters are tuned for an
-18 GB M3 Pro and should be adjusted for other memory budgets.
-
-For NVIDIA hosts, install the `[cuda]` extra and run with
-`--backend cuda`. The CUDA path is a thin wrapper around the
-OpenBMB MiniCPM5 Unsloth recipe; it is not the default and is not
-tested in CI.
-
-## Installation
-
-### From source (Apple Silicon)
-
-```bash
-git clone https://github.com/sachncs/finetune.git
-cd finetune
-uv venv --python 3.12
-source .venv/bin/activate
-uv pip install -e '.[dev,mlx]'
-```
-
-Verify:
-
-```bash
-python -c "import hone; print(hone.__version__)"   # 0.2.0
-hone --help
-python -m hone.run --help   # delegates to mlx_lm.lora
-```
-
-### From source (NVIDIA)
-
-```bash
-git clone https://github.com/sachncs/finetune.git
-cd finetune
-uv venv --python 3.12
-source .venv/bin/activate
-uv pip install -e '.[dev,cuda]'
-hone train code --backend cuda
-```
-
-| Extra | Includes |
-|---|---|
-| `dev` | mypy, pytest, ruff, hypothesis |
-| `mlx` | mlx-lm, datasets (Apple Silicon only) |
-| `cuda` | torch, transformers, trl, peft, unsloth (NVIDIA) |
-
-Core deps only: `pyyaml`, `typer`.
 
 ## Quick Start
 
-### Prepare data
+### 1. Install
 
 ```bash
-hone prepare file --input data/raw.jsonl --output data/processed/code
+git clone https://github.com/sachncs/hone.git
+cd hone
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -e '.[dev,soup]'
 ```
 
-Reads JSONL, normalizes each line to a chat record, splits 95/5 with
-seed 42, writes `train.jsonl` and `valid.jsonl` under the output
-directory.
-
-For HF-config corpora that mix very long sequences (e.g. KIMI's
-general-distillation + STEM configs reach 10000+ tokens per row), pass
-`--max-tokens` to drop the long tail before training:
+`setup.sh` automates this and runs the Soup smoke against an
+existing `data/full/codex/train.jsonl`:
 
 ```bash
-hone prepare all --repo ianncity/KIMI-K2.5-1000000x \
-    --configs General-Distillation,PHD-Science,General-Math,MultilingualSTEM \
-    --max-tokens 4096 \
-    --output data/full/kimi/train.jsonl
+./setup.sh
 ```
 
-Records longer than the cap are skipped at prepare time, before they
-can produce empty loss targets after `--max-seq-length` truncation.
+### 2. Prepare a JSONL
 
-### Train (Apple Silicon, MLX)
+Pick the function that matches your source data:
+
+| Source | Function |
+|---|---|
+| Local JSONL | `hone.prepare.prepare_local_file` |
+| HF competitive-programming corpus | `hone.prepare.prepare_reservoir_sample` |
+| HF SWE-bench | `hone.prepare.prepare_swe` |
+| Any HF dataset (chat or codeforces-text) | `hone.prepare.prepare_stream` |
+| LiveCodeBench prompts (for eval) | `hone.prepare.prepare_eval_prompts` |
+
+Example — stream CodeX, drop rows over 4096 tokens, write
+`train.jsonl` + `valid.jsonl`:
+
+```python
+from pathlib import Path
+import logging
+from hone.prepare import prepare_stream, PrepareRequest
+
+logging.basicConfig(level=logging.INFO)
+request = PrepareRequest(output=Path("data/full/codex/train.jsonl"), seed=42)
+prepare_stream(
+    request=request,
+    repo="Modotte/CodeX-7M-Non-Thinking",
+    configs="default",
+    mode="sft",
+    max_tokens=4096,
+    tokenizer_model="openbmb/MiniCPM5-1B",
+)
+```
+
+### 3. Train with Soup
 
 ```bash
-hone train code
+uv run soup train --config configs/soup-sft-codex-full.yaml
 ```
 
-Reads `configs/code.yaml`, invokes `python -m hone.run` with
-`HONE_DEVICE=gpu`, and writes the adapter to `artifacts/code-lora/`.
-
-Before launching the multi-day full sequence, validate that a small
-kimi subset trains without NaN losses:
+Or use the wrapper:
 
 ```bash
-./train.sh --layers 4 --seq-len 2048   # smoke training run
+./train-soup.sh smoke   # 32 iters / ~30 s, validates the pipeline
+./train-soup.sh full    # 1 epoch over the 95k-row CodeX corpus, ~70 min on M3 Pro 18 GB
+./train-soup.sh gen "Write a Python hello world"
+./train-soup.sh export  # fuse LoRA into the base
+./train-soup.sh ship    # `soup ship` regression gate (needs PyTorch)
 ```
 
-Or run the dedicated `configs/smoke-kimi.yaml` against an already-prepared
-`data/full/kimi/train.jsonl` to confirm the data pipeline produced
-clean records.
+The smoke run measures **~7.4 GB peak** on the M3 Pro 18 GB at
+seq 2048 batch 1 with grad-checkpointing, so the full run has
+~10 GB of headroom.
 
-### Generate
+See [`configs/soup-sft-codex-smoke.yaml`](configs/soup-sft-codex-smoke.yaml)
+and [`configs/soup-sft-codex-full.yaml`](configs/soup-sft-codex-full.yaml)
+for the two training recipes.
 
-```bash
-hone generate prompt --adapter artifacts/code-lora \
-    "Write a Python solution for two sum."
+## Python API
+
+The package is small on purpose. Public surface:
+
+```python
+from hone.prepare import (
+    prepare_local_file,    # normalize + split a local JSONL
+    prepare_reservoir_sample,  # uniform-random sample of an HF stream
+    prepare_swe,           # SWE-bench -> patch-completion JSONL
+    prepare_stream,        # full HF config -> chat or text records
+    prepare_eval_prompts,  # LiveCodeBench prompt dump
+
+    PrepareRequest,        # common knobs (output, seed, logger)
+    PrepareResult,         # summary (written / skipped / filtered_long)
+
+    PrepareError, DataError, ValidationError,  # exception hierarchy
+    Role,                  # chat-role enum
+)
 ```
 
-## Soup (one-YAML training pipeline)
+## How good will the model be?
 
-hone ships a parallel pipeline that uses
-[Soup](https://github.com/MakazhanAlpamys/Soup) (a single-config LLM
-fine-tuner from the community) to train `openbmb/MiniCPM5-1B-MLX` on
-the prepared CodeX corpus. Use it when you want Soup's data validation,
-experiment tracking, and `soup ship` regression gate alongside hone's
-existing data preparation. **Honest expectation: this gives you a
-strong small-model coding SFT, not a leaderboard-topping model — see
-[`docs/SOTA-EXPECTATIONS.md`](docs/SOTA-EXPECTATIONS.md) for the
-measurable targets.**
+A 1B-parameter LoRA on an 18 GB MacBook Pro cannot reach absolute
+SOTA for coding — that lives at 30B+ params and multi-day multi-GPU
+runs. What this pipeline produces is a **strong small-model
+coding SFT** that:
 
-```bash
-uv pip install "soup-cli[mlx]"     # one-time: add Soup alongside hone
-./train-soup.sh smoke              # 32 iters on 40 rows, ~30 s, validates the pipeline
-./train-soup.sh full               # 1 epoch over 95k CodeX rows, ~70 min on M3 Pro 18 GB
-./train-soup.sh gen "Write a Python function to compute factorial."  # prompt
-./train-soup.sh export             # fuse LoRA into the base for deployment
-./train-soup.sh ship               # `soup ship` regression gate (needs PyTorch)
-```
-
-| Concern | `hone` (this repo) | Soup (this section) |
-|---|---|---|
-| Config schema | hone YAML (`configs/code.yaml`) | Soup YAML (`configs/soup-sft-codex-*.yaml`) |
-| Backend on M-series | MLX via `python -m hone.run` | MLX via `soup train --backend mlx` |
-| Adapter resume | yes (multi-stage `train.sh`) | yes (`resume_from_checkpoint`) |
-| Data format | chatml only | chatml / alpaca / sharegpt / DPO / KTO |
-| Inference | `hone generate prompt` | `mlx_lm.generate` / `mlx_lm fuse` for deployment |
-| Eval | `hone evaluate run` (LiveCodeBench) | `soup ship` (7-suite regression gate) |
-| Smoke pattern | `./train.sh --layers 4 --seq-len 2048` | `./train-soup.sh smoke` |
-
-The smoke run measures **~7.4 GB peak** on M3 Pro 18 GB at seq 2048
-batch 1 with grad-checkpointing, so a full run on the same hardware
-has ~10 GB of headroom and is safe to launch in the background.
-A small `soup_mlx_compat.py` shim is installed at
-`.venv/lib/python3.12/site-packages/` so MLX inference loads the
-Llama tokenizer when transformers 4.57 cannot resolve
-`TokenizersBackend` without PyTorch.
-
-## Subcommands
-
-```text
-hone prepare      data preparation
-  file           normalize and split a local JSONL
-  code           reservoir-sample competitive-programming rows
-  swe            build SWE-bench SFT rows (refuses non-train splits)
-  all            materialize every row of an HF config
-  evaluate       download LiveCodeBench prompts
-
-hone train        train adapters
-  code           coding adapter via mlx or cuda
-  swe            SWE adapter via mlx or cuda
-  all            full sequence across every dataset
-
-hone generate     inference
-  prompt         single-prompt generation
-  file           bulk generation from a JSONL prompts file
-
-hone tune         hyperparameter search
-  run            Cartesian product trial runner
-
-hone evaluate     evaluation
-  run            LiveCodeBench evaluator (delegates to LCB)
-```
+- beats the base `openbmb/MiniCPM5-1B-Instruct` on HumanEval / MBPP /
+  LiveCodeBench v5 (realistic under-2B targets documented in
+  [`docs/SOTA-EXPECTATIONS.md`](docs/SOTA-EXPECTATIONS.md)),
+- runs interactively on the M-series GPU where frontier models
+  cannot,
+- composes cleanly with `soup ship` for regression detection
+  and `mlx_lm fuse` for deployment.
 
 ## Configuration
 
-Settings live in `hone.config` and are loaded from YAML files.
-Every config value is read at process start and missing required
-keys raise immediately.
+Soup owns the training config (`configs/soup-sft-codex-*.yaml`).
+The prepare service takes:
 
-Required keys (validated by `hone.config.validate`):
-
-| Key | Description |
+| Argument | Effect |
 |---|---|
-| `model` | HuggingFace model identifier (e.g. `openbmb/MiniCPM5-1B`) |
-| `train` | Boolean; must be `true` for training |
-| `data` | Directory containing `train.jsonl` and `valid.jsonl` |
-
-Full config schema is the upstream `mlx_lm.lora` contract — see
-[`docs/train.md`](docs/train.md) for an example.
-
-## Environment
-
-| Variable | Default | Effect |
-|---|---|---|
-| `HONE_DEVICE` | `gpu` | `gpu` or `cpu`; case-insensitive; validated at startup |
+| `output` | Path to write `train.jsonl` (+ `valid.jsonl`) |
+| `seed` | RNG seed for splits and reservoir sampling |
+| `ratio` | Validation split ratio (exclusive 0..1) |
+| `max_tokens` | Drop rows whose token count exceeds this; `0` disables |
+| `max_samples` | Stop after this many rows are written; `0` means full pass |
+| `tokenizer_model` | HF model id used for token-count filtering |
 
 ## Documentation
 
-- [`docs/install.md`](docs/install.md) — installation, environment, extras
-- [`docs/quickstart.md`](docs/quickstart.md) — first training run end-to-end
-- [`docs/data.md`](docs/data.md) — data contract and preparation commands
-- [`docs/train.md`](docs/train.md) — training commands and configs
-- [`docs/eval.md`](docs/eval.md) — LiveCodeBench and SWE-bench evaluation
-- [`docs/architecture.md`](docs/architecture.md) — package layout, public API, naming convention
+- [`docs/SOTA-EXPECTATIONS.md`](docs/SOTA-EXPECTATIONS.md) — what
+  "strong small-model SFT" means, with measurable targets and
+  honest failure modes.
+- [`docs/ARCHIVE.md`](docs/ARCHIVE.md) — the frozen MLX / Unsloth
+  driver and how to revive it.
 
 ## Project Structure
 
 ```
 hone/
-├── hone/                  # The library
-│   ├── __init__.py        # Public API + __version__
-│   ├── __main__.py        # python -m hone entry
-│   ├── model.py           # Example, Message, Role, Scalar, Meta
-│   ├── normalize.py       # Normalizer, SweNormalizer
-│   ├── split.py           # Splitter + MIN_VALID
-│   ├── jsonl.py           # Reader, Writer
-│   ├── log.py             # setup, get, LOGGER
-│   ├── config.py          # load, save, validate + REQUIRED_KEYS
-│   ├── run.py             # MLX device launcher (HONE_DEVICE)
-│   ├── types.py           # JsonScalar, JsonObject
-│   └── cli/
-│       ├── __init__.py    # typer dispatcher + main()
-│       ├── prepare.py     # file, code, swe, all, evaluate
-│       ├── train.py       # code, swe, all
-│       ├── generate.py    # prompt, file, unfence
-│       ├── tune.py        # run + TrialSpec, TrialResult
-│       └── evaluate.py    # run
+├── hone/
+│   └── prepare/                # JSONL prep library
+│       ├── __init__.py         # public surface
+│       ├── service.py          # prepare_local_file, prepare_stream, ...
+│       ├── mappers.py          # as_sft, as_codeforces_text
+│       ├── reservoir.py        # Vitter-style uniform sampler
+│       ├── token_filter.py     # tokenizer-based length filter
+│       └── hf.py               # HubStream / load_split
+├── archive/
+│   └── hone_mlx/               # frozen MLX / Unsloth driver
 ├── tests/
-│   ├── unit/              # 52 behavior tests
-│   ├── integration/       # 29 CLI integration tests
-│   ├── property/          # 5 hypothesis property tests
-│   └── mlx/               # 11 MLX-device tests (mark-gated)
+│   └── test_prepare.py         # end-to-end tests for the prepare layer
 ├── configs/
-│   ├── code.yaml
-│   ├── swe.yaml
-│   ├── tune-code.yaml
-│   ├── tune-swe.yaml
-│   ├── smoke.yaml
-│   ├── smoke-kimi.yaml
-│   ├── soup-sft-codex-smoke.yaml   # Soup MLX smoke (32 iters / 30 s)
-│   └── soup-sft-codex-full.yaml    # Soup MLX full SFT (1 epoch / ~70 min)
-├── docs/                  # install, quickstart, data, train, eval, architecture, SOTA-EXPECTATIONS
-├── todo/                  # per-phase acceptance criteria
-├── train-soup.sh          # Soup driver (smoke/full/gen/export/ship)
-├── soup_mlx_compat.py     # AutoTokenizer Llama-fallback for MLX without PyTorch
-├── .github/workflows/ci.yml
+│   ├── soup-sft-codex-smoke.yaml
+│   └── soup-sft-codex-full.yaml
+├── docs/
+│   ├── SOTA-EXPECTATIONS.md
+│   └── ARCHIVE.md
+├── train-soup.sh               # Soup driver (smoke/full/gen/export/ship)
+├── setup.sh                    # bootstrap: install + tests + soup smoke
+├── soup_mlx_compat.py          # AutoTokenizer Llama-fallback shim
 ├── pyproject.toml
+├── README.md
 ├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── SECURITY.md
-└── LICENSE
+├── LICENSE
+└── .gitignore
 ```
-
-## Development
-
-```bash
-uv venv --python 3.12
-source .venv/bin/activate
-uv pip install -e '.[dev,mlx]'
-```
-
-Linting and formatting:
-
-```bash
-uv run pytest -m "not mlx"
-uv run ruff check hone tests
-uv run ruff format --check hone tests
-uv run mypy hone tests
-```
-
-## Testing
-
-```bash
-uv run pytest                        # full suite (Apple Silicon)
-uv run pytest -m "not mlx"           # Linux-compatible
-uv run pytest tests/property/         # hypothesis property tests
-uv run pytest tests/mlx/              # MLX-device tests (skipped on Linux)
-```
-
-Before a multi-day run, smoke-test the kimi data path:
-
-```bash
-HONE_DEVICE=gpu uv run hone train code --config configs/smoke-kimi.yaml --device gpu
-```
-
-Expect finite train loss and stable val loss within 50 iters; abort
-the multi-day run if the smoke run produces `nan` or `0.000` losses.
-
-The current collection size is reported by `pytest --collect-only`.
-The suite covers every public API: behavior, edge cases, invalid
-inputs, error paths, integration via `typer.testing.CliRunner`, and
-property-based invariants (Writer/Reader round-trip, Splitter
-disjoint + element-preservation, Normalizer validity).
-
-## Tech Stack
-
-| Category | Technology |
-|---|---|
-| Target platform | Apple Silicon (macOS, M-series) |
-| Language | Python 3.12+ |
-| Backend (Apple) | MLX-LM with LoRA |
-| Backend (NVIDIA) | Unsloth with LoRA |
-| CLI | Typer |
-| Property tests | Hypothesis |
-| Lint / format | ruff |
-| Type check | mypy (strict) |
-| Tests | pytest |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are
-welcome; the maintainer (Sachin) reviews every PR.
-
-## Security
-
-Vulnerability reporting, supported versions, and the disclosure
-timeline live in [SECURITY.md](SECURITY.md).
-
-## Author
-
-**Sachin** — author and maintainer. See
-[github.com/sachncs](https://github.com/sachncs).
 
 ## License
 
