@@ -2,19 +2,22 @@
 # Soup-driven MiniCPM5-1B SFT for coding (Apple Silicon, MLX backend).
 #
 # Usage:
-#   ./train-soup.sh                # default: smoke only
-#   ./train-soup.sh smoke          # 32 iters, ~30s, validates the pipeline
-#   ./train-soup.sh full           # full CodeX run, ~70 min on M3 Pro 18 GB
-#   ./train-soup.sh gen "prompt"   # single-prompt generation via mlx_lm
-#   ./train-soup.sh export         # fuse LoRA into base for deployment
-#   ./train-soup.sh ship           # `soup ship` regression gate (needs PyTorch)
+#   ./train-soup.sh                       # default: smoke on CodeX
+#   ./train-soup.sh smoke                 # 32 iters, ~30s, validates CodeX path
+#   ./train-soup.sh smoke-ling            # 50 iters on Ling-Coder (different dist)
+#   ./train-soup.sh full                  # full CodeX run, ~70 min on M3 Pro 18 GB
+#   ./train-soup.sh full-combined         # full CodeX+Ling-Coder, ~100 min
+#   ./train-soup.sh gen "prompt"          # single-prompt generation via mlx_lm
+#   ./train-soup.sh export                # fuse LoRA into base for deployment
+#   ./train-soup.sh ship                  # `soup ship` regression gate (needs PyTorch)
 #
 # Env:
-#   SOUP_CONFIG_FULL  — override the full-run config path
-#   SOUP_CONFIG_SMOKE — override the smoke config path
-#   SOUP_OUTPUT       — override the output dir (default artifacts/soup-codex-full)
-#   SOUP_BASE         — override the base model (default openbmb/MiniCPM5-1B-MLX)
-#   SOUP_SKIP_SMOKE=1 — skip the smoke validation step before full
+#   SOUP_CONFIG_FULL          — override the full-run config path
+#   SOUP_CONFIG_SMOKE         — override the smoke config path
+#   SOUP_OUTPUT               — override the output dir (default artifacts/soup-codex-full)
+#   SOUP_BASE                 — override the base model (default openbmb/MiniCPM5-1B-MLX)
+#   SOUP_SKIP_SMOKE=1         — skip the smoke validation step before full
+#   SOUP_DATA_DIR             — override the data dir used by `data` subcommand
 
 set -euo pipefail
 
@@ -25,7 +28,9 @@ source .venv/bin/activate
 
 ACTION="${1:-smoke}"
 SOUP_CONFIG_SMOKE="${SOUP_CONFIG_SMOKE:-configs/soup-sft-codex-smoke.yaml}"
+SOUP_CONFIG_SMOKE_LING="${SOUP_CONFIG_SMOKE_LING:-configs/soup-sft-lingcoder-smoke.yaml}"
 SOUP_CONFIG_FULL="${SOUP_CONFIG_FULL:-configs/soup-sft-codex-full.yaml}"
+SOUP_CONFIG_FULL_COMBINED="${SOUP_CONFIG_FULL_COMBINED:-configs/soup-sft-codex-lingcoder-full.yaml}"
 SOUP_OUTPUT="${SOUP_OUTPUT:-artifacts/soup-codex-full}"
 SOUP_BASE="${SOUP_BASE:-openbmb/MiniCPM5-1B-MLX}"
 
@@ -48,6 +53,13 @@ case "$ACTION" in
         echo "==> smoke OK; adapter at artifacts/soup-codex-smoke/adapters.safetensors"
         echo "    validate with: ./train-soup.sh gen 'Write a Python hello world'"
         ;;
+    smoke-ling)
+        echo "==> Soup MLX Ling-Coder smoke (50 iters on data/soup/lingcoder/train.jsonl)"
+        uv run soup train --config "$SOUP_CONFIG_SMOKE_LING" --yes \
+            2>&1 | tee "$LOG_DIR/soup-smoke-ling-$ts.log"
+        echo
+        echo "==> Ling-Coder smoke OK; adapter at artifacts/soup-lingcoder-smoke/adapters.safetensors"
+        ;;
     full)
         if [[ "${SOUP_SKIP_SMOKE:-0}" != "1" ]]; then
             echo "==> running smoke validation first (set SOUP_SKIP_SMOKE=1 to skip)"
@@ -60,6 +72,23 @@ case "$ACTION" in
             2>&1 | tee "$LOG_DIR/soup-full-$ts.log"
         echo
         echo "==> full SFT done; adapter at $SOUP_OUTPUT/adapters.safetensors"
+        echo "    next: ./train-soup.sh gen '...'    # prompt"
+        echo "          ./train-soup.sh export       # fuse + merge"
+        echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
+        ;;
+    full-combined)
+        if [[ "${SOUP_SKIP_SMOKE:-0}" != "1" ]]; then
+            echo "==> running smoke validation first (set SOUP_SKIP_SMOKE=1 to skip)"
+            "$0" smoke-ling
+        fi
+        echo "==> Soup MLX full SFT (MiniCPM5-1B-MLX on CodeX + Ling-Coder, 5k-row stratified subset)"
+        echo "    log: $LOG_DIR/soup-full-combined-$ts.log"
+        echo "    expected: ~80 min on M3 Pro 18 GB, ~8 MB adapter"
+        SOUP_OUTPUT="artifacts/soup-combined-5k-full" \
+            uv run soup train --config configs/soup-sft-combined-5k-full.yaml --yes \
+            2>&1 | tee "$LOG_DIR/soup-full-combined-$ts.log"
+        echo
+        echo "==> combined SFT done; adapter at artifacts/soup-combined-5k-full/adapters.safetensors"
         echo "    next: ./train-soup.sh gen '...'    # prompt"
         echo "          ./train-soup.sh export       # fuse + merge"
         echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
@@ -127,7 +156,7 @@ case "$ACTION" in
         ;;
     *)
         echo "Unknown action: $ACTION" >&2
-        echo "Usage: $0 [smoke|full|gen|export|ship]" >&2
+        echo "Usage: $0 [smoke|smoke-ling|full|full-combined|gen|export|ship]" >&2
         exit 2
         ;;
 esac
