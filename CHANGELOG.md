@@ -4,143 +4,85 @@ All notable changes to **hone** are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Added
-- `hone.split.partition`: streaming, seeded, disjoint train/valid
-  split of a JSONL file with memory bounded by the validation size.
-- `click` is now listed in the `[dev]` extra so the test suite
-  imports it without a manual install step.
-- `hone prepare all --max-tokens N` drops records whose token count
-  exceeds `N` so the long tail of an HF dataset cannot produce
-  empty loss targets after `--max-seq-length` truncation. The
-  tokenizer is loaded via `mlx_lm.tokenizer_utils.AutoTokenizer`,
-  which is bundled with the `[mlx]` extra — no new dep required.
-- `configs/smoke-kimi.yaml`: a 50-iter smoke config for the kimi
-  stage, runnable via `setup.sh` (auto-skipped when
-  `data/full/kimi/train.jsonl` is absent). Uses
-  `openbmb/MiniCPM5-1B` to match the production training path.
-- Soup driver: `train-soup.sh {smoke,full,gen,export,ship}` trains
-  `openbmb/MiniCPM5-1B-MLX` on `data/full/codex/` via
-  `soup train --backend mlx`, fuses LoRA into the base for
-  deployment, and exposes Soup's `soup ship` regression gate.
-  Configs at `configs/soup-sft-codex-{smoke,full}.yaml`. Measured
-  peak memory on M3 Pro 18 GB: **7.4 GB at smoke / 8.9 GB at 256-row
-  validation**. Smoke run writes 32 iters / 30 s; full run ~70 min.
-  See `docs/SOTA-EXPECTATIONS.md` for honest expectations — this
-  pipeline gives a strong small-model coding SFT, not a leaderboard
-  SOTA.
-- `soup_mlx_compat.py`: a 30-line `AutoTokenizer.from_pretrained`
-  shim that falls back to `LlamaTokenizerFast` when transformers
-  4.57 cannot resolve `TokenizersBackend` without a PyTorch
-  backend. `setup.sh` installs it as a `.pth` sitecustomize so
-  `mlx_lm.generate` works in the MLX-only venv.
+## [0.3.0] - 2026-08-17
 
 ### Changed
-- Renamed public API to comply with the single-word identifier
-  rule: `spit` → `partition`, `_FORMAT` → `FORMAT`,
-  `_run_mlx`/`_run_cuda` → `invoke_mlx`/`invoke_cuda`,
-  `read_device` → `device`, `has_metal` → `metal`,
-  `gpu_info` → `gpu`, `setup_device` → `select`,
-  `build_trials` → `expand`, `parse_validation_loss` → `loss`,
-  `load_metrics` → `metrics`, `write_trial_config` → `materialize`,
-  `objective_value` → `score`, `run_trial` → `execute`,
-  `strip_fences` → `unfence`.
-- Forbidden local names (`item`, `valid_tmp`, `handler`,
-  `utils`) replaced throughout the library and CLI.
-- Test helper functions renamed to single-word identifiers
-  (`make_examples` → `examples`, `make_jsonl` → `jsonl`,
-  `read_lines` → `lines`, `write_jsonl` → `jsonl`,
-  `write_chat_jsonl` → `chat_jsonl`, `make_chat_row` → `chat_row`,
-  `make_example` → `example`, `fake_datasets_module` →
-  `fake_datasets`, `unfake_datasets_module` → `restore_datasets`,
-  `capture_subprocess_call` → `make_capture`,
-  `argument_after` → `value_after`,
-  `messages_strategy` → `messages`, `example_strategy` → `example`,
-  `chat_record_strategy` → `chat_record`,
-  `message_strategy` → `message`).
-- `configs/code.yaml` and `configs/swe.yaml`: bumped
-  `learning_rate` to `2e-5`. The previous `1e-5` / `8e-6` defaults
-  produced `Train loss nan` early in long-sequence stages.
-- `hone train all --seq-len` default lowered from `8192` to `4096`.
-  8192 quadruples attention cost and risks OOM on the M3 Pro's 18 GB
-  unified memory with mixed-length batches. Pair with
-  `hone prepare all --max-tokens 4096` to drop long-tail records
-  upstream.
 
-### Fixed
-- `hone train all` now creates a deterministic 5% validation split
-  (`valid.jsonl`) per stage before training, fixing the
-  `Validation set not found or empty` failure from mlx_lm. `--iters`
-  is the post-split train line count.
-- `hone.split.partition` previously called `write()` with mismatched
-  keyword arguments (`train_path`, `valid_path`) that did not match
-  the helper's positional signature.
-- `hone prepare all` rejects rows whose prompt or completion is
-  empty after stripping, both for chat-style `messages` rows and
-  for `prompt`/`completion` rows. Previously these slipped through
-  and surfaced as a confusing "content cannot be empty" error from
-  `Example.__post_init__` downstream.
-- `hone.jsonl.Reader` now raises `path:line_number:messages[i].content
-  is empty` with file/line context when an empty-content row is
-  encountered, instead of a bare `ValueError` from `Message`.
+- **Soup-first cut.** The training pipeline (`hone.train`,
+  `hone.tune`, `hone.generate`, `hone.cli.*`, `hone.run`,
+  `hone.backends`, `hone.model`, `hone.jsonl`, `hone.normalize`,
+  `hone.split`, `hone.chat`, `hone.errors`, `hone.config`,
+  `hone.log`, and the `hone` CLI binary) is moved to
+  [`archive/hone_mlx/`](archive/hone_mlx/) as a frozen alternative
+  for operators who need the hand-rolled MLX/Unsloth pipeline.
+  See [`docs/ARCHIVE.md`](docs/ARCHIVE.md) for what it is and how
+  to revive it.
+- **`hone` is now a JSONL prep library.** The remaining
+  `hone.prepare` subpackage is the only thing exposed at the top
+  level. It has zero CLI, zero MLX deps, and zero Unsloth deps —
+  just `datasets` plus Python stdlib.
+- Repository description changed from
+  "Apple Silicon supervised fine-tuning pipeline" to
+  "JSONL data preparation for Soup fine-tuning."
+- Repository keywords narrowed to `soup, finetune, data-prep, jsonl, huggingface`.
+- README rewritten around Soup as the primary path; the MLX
+  alternative is documented once and moved to ARCHIVE.md.
+- `docs/{install,quickstart,data,train,eval,architecture}.md`
+  removed; they described the deleted MLX pipeline. Replaced with
+  [`docs/ARCHIVE.md`](docs/ARCHIVE.md) (frozen-driver reference) and
+  the existing [`docs/SOTA-EXPECTATIONS.md`](docs/SOTA-EXPECTATIONS.md).
+- `pyproject.toml` slimmed: `typer`, `pyyaml`, `mlx-lm`,
+  `transformers`, `trl`, `peft`, `unsloth`, `torch`, `hypothesis`,
+  `click` removed from runtime + dev dependencies. `[soup]` is the
+  new optional extra; `[mlx]` and `[cuda]` removed.
+- `setup.sh` simplified: installs `hone[dev,soup]`, runs the new
+  8-test `tests/test_prepare.py` suite, runs `train-soup.sh smoke`
+  when `data/full/codex/train.jsonl` exists.
+
+### Removed
+
+- `hone.cli` package and the `hone` CLI binary.
+- `hone.train`, `hone.tune`, `hone.generate` subpackages.
+- `configs/{code,swe,smoke,smoke-kimi,tune-code,tune-swe}.yaml`.
+- `train.sh`.
+- `tests/{unit,integration,mlx,property}/` — 218 tests covering
+  the deleted MLX pipeline. Replaced by `tests/test_prepare.py`
+  (8 tests) covering the prepare layer's actual behavior.
+
+### Added
+
+- `tests/test_prepare.py` — 8 end-to-end tests for the prepare
+  service: local file split, prompt/completion acceptance, ratio
+  validation, malformed-JSON rejection, empty-row detection,
+  exception hierarchy, and the chat role enum.
+- [`docs/ARCHIVE.md`](docs/ARCHIVE.md) — reference for the
+  frozen MLX driver; lists every archived module, its purpose,
+  and how to revive it on a development branch.
 
 ## [0.2.0] - 2026-08-03
 
+The last release of the original `hone` MLX/Unsloth driver.
+Summarized here for history; everything from this release lives
+in [`archive/hone_mlx/`](archive/hone_mlx/) and is no longer
+maintained.
+
 ### Added
-- `hone` package: model- and dataset-agnostic supervised
-  fine-tuning pipeline.
-- Public API: `Example`, `Message`, `Role`, `Scalar`, `Meta`,
-  `Normalizer`, `SweNormalizer`, `Splitter`, `Reader`, `Writer`,
-  `REQUIRED_KEYS`, `MIN_VALID`, `LOGGER`, `setup`, `get`,
-  `load`, `save`, `validate`.
-- Five CLI subcommands (`prepare`, `train`, `generate`, `tune`,
-  `evaluate`) implemented with `typer` and a single binary.
+
+- `hone` package: end-to-end supervised fine-tuning pipeline
+  with five `typer` subcommands (`prepare`, `train`, `generate`,
+  `tune`, `evaluate`).
 - `python -m hone.run` entry point for the MLX device launcher.
-- MLX device launcher (`HONE_DEVICE` env var) that explicitly
-  verifies Metal availability, refuses to start with `gpu` when
-  Metal is unavailable, and logs the active accelerator.
-- Apple Silicon CI workflow plus a Linux no-MLX CI workflow,
-  consolidated under `.github/workflows/ci.yml`.
-- Property-based tests with `hypothesis` for round-trip and
-  invariant properties (Writer/Reader, Splitter, Normalizer).
-- `docs/` split: install, quickstart, data, train, eval,
-  architecture.
-- `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`,
-  `.github/dependabot.yml`.
+- MLX device launcher reading `HONE_DEVICE` with explicit Metal
+  verification and graceful refusal when Metal is unavailable.
+- CUDA/Unsloth path on NVIDIA hosts via the `[cuda]` extra.
+- Property-based tests with `hypothesis` for Writer/Reader,
+  Splitter, and Normalizer invariants.
+- Apple Silicon + Linux CI workflows under
+  `.github/workflows/ci.yml`.
 
 ### Changed
+
 - Renamed package from `finetune-pipeline` to `hone`.
-- Renamed `TrainingExample` → `Example`, `ChatMessage` →
-  `Message`, `DatasetSplitter` → `Splitter`,
-  `JsonlDatasetReader` → `Reader`, `JsonlDatasetWriter` →
-  `Writer`.
-- Renamed `FINETUNE_DEVICE` → `HONE_DEVICE`.
-- Renamed `scripts/` orchestration to `hone <subcommand>`.
-- Hardware-specific config names (`m3pro-code.yaml`,
-  `m3pro-swe.yaml`, `m3pro.yaml`, `tuning-code.yaml`,
-  `tuning-swe.yaml`) replaced with generic names (`code.yaml`,
-  `swe.yaml`, `tune-code.yaml`, `tune-swe.yaml`). The dead
-  `m3pro.yaml` was deleted.
-- Moved from `src/finetune/` to flat `hone/` at repo root.
-- Adopted `typer` for CLI parsing.
 - Default model reference updated from
-  `mlx-community/MiniCPM5-1B-4bit` (post-training quantized)
-  to `openbmb/MiniCPM5-1B` (upstream base model). The
-  `mlx-community/...` form is used only for inference.
-
-### Removed
-- `src/finetune/` package layout (replaced by flat `hone/`).
-- `scripts/` directory (replaced by CLI subcommands).
-- `configs/m3pro.yaml` (dead code).
-- Double-underscore methods (`__normalize_messages`,
-  `__parse_record`) — replaced by public methods.
-- `SystemExit` calls from library code (CLI converts exceptions
-  to exit codes via `typer.BadParameter` and `typer.Exit`).
-- `print(...)` calls from library code (replaced by
-  `hone.log`).
-
-## [0.1.0]
-
-Initial release as `finetune-pipeline`. Apple Silicon M3 Pro,
-18 GB unified memory, MLX-LM with LoRA, hardware-named configs.
+  `mlx-community/MiniCPM5-1B-4bit` (post-training quantized) to
+  `openbmb/MiniCPM5-1B` (upstream base model).
