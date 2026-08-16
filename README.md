@@ -34,6 +34,7 @@ unavailable on Apple Silicon.
 |---|---|
 | Backend (Apple Silicon) | [MLX-LM](https://github.com/ml-explore/mlx-lm) with LoRA |
 | Backend (NVIDIA) | [Unsloth](https://github.com/unslothai/unsloth) with LoRA (optional `[cuda]`) |
+| Soup driver | [Soup](https://github.com/MakazhanAlpamys/Soup) (optional `[soup]`) — one-YAML training via `soup train --backend mlx` |
 | Data format | JSONL (`messages` or `prompt`/`completion`) |
 | CLI | [Typer](https://github.com/tiangolo/typer) |
 | Property tests | [Hypothesis](https://github.com/HypothesisWorks/hypothesis) |
@@ -52,6 +53,7 @@ unavailable on Apple Silicon.
 - **Multi-stage training** — `hone train all` orchestrates the full KIMI → CodeX → Ling-Coder → Codeforces sequence with adapter resume.
 - **Hyperparameter search** — `hone tune` runs Cartesian-product trials and selects by validation loss or benchmark metric.
 - **LiveCodeBench evaluation** — `hone evaluate` invokes the official LCB evaluator on a trained adapter.
+- **Soup integration** — one-YAML SFT pipeline (configs/soup-sft-codex-*.yaml + train-soup.sh) trains MiniCPM5-1B-MLX on CodeX with `soup train --backend mlx` and ships the LoRA adapter. ~7.4 GB peak on M3 Pro 18 GB.
 - **Production-grade logging** — every entry point logs via `hone.log`; CLI surfaces exit codes via typer.
 - **No half-private names** — every identifier is public per AGENTS.md; library code raises typed exceptions; CLI converts to exit codes.
 
@@ -161,6 +163,45 @@ hone generate prompt --adapter artifacts/code-lora \
     "Write a Python solution for two sum."
 ```
 
+## Soup (one-YAML training pipeline)
+
+hone ships a parallel pipeline that uses
+[Soup](https://github.com/MakazhanAlpamys/Soup) (a single-config LLM
+fine-tuner from the community) to train `openbmb/MiniCPM5-1B-MLX` on
+the prepared CodeX corpus. Use it when you want Soup's data validation,
+experiment tracking, and `soup ship` regression gate alongside hone's
+existing data preparation. **Honest expectation: this gives you a
+strong small-model coding SFT, not a leaderboard-topping model — see
+[`docs/SOTA-EXPECTATIONS.md`](docs/SOTA-EXPECTATIONS.md) for the
+measurable targets.**
+
+```bash
+uv pip install "soup-cli[mlx]"     # one-time: add Soup alongside hone
+./train-soup.sh smoke              # 32 iters on 40 rows, ~30 s, validates the pipeline
+./train-soup.sh full               # 1 epoch over 95k CodeX rows, ~70 min on M3 Pro 18 GB
+./train-soup.sh gen "Write a Python function to compute factorial."  # prompt
+./train-soup.sh export             # fuse LoRA into the base for deployment
+./train-soup.sh ship               # `soup ship` regression gate (needs PyTorch)
+```
+
+| Concern | `hone` (this repo) | Soup (this section) |
+|---|---|---|
+| Config schema | hone YAML (`configs/code.yaml`) | Soup YAML (`configs/soup-sft-codex-*.yaml`) |
+| Backend on M-series | MLX via `python -m hone.run` | MLX via `soup train --backend mlx` |
+| Adapter resume | yes (multi-stage `train.sh`) | yes (`resume_from_checkpoint`) |
+| Data format | chatml only | chatml / alpaca / sharegpt / DPO / KTO |
+| Inference | `hone generate prompt` | `mlx_lm.generate` / `mlx_lm fuse` for deployment |
+| Eval | `hone evaluate run` (LiveCodeBench) | `soup ship` (7-suite regression gate) |
+| Smoke pattern | `./train.sh --layers 4 --seq-len 2048` | `./train-soup.sh smoke` |
+
+The smoke run measures **~7.4 GB peak** on M3 Pro 18 GB at seq 2048
+batch 1 with grad-checkpointing, so a full run on the same hardware
+has ~10 GB of headroom and is safe to launch in the background.
+A small `soup_mlx_compat.py` shim is installed at
+`.venv/lib/python3.12/site-packages/` so MLX inference loads the
+Llama tokenizer when transformers 4.57 cannot resolve
+`TokenizersBackend` without PyTorch.
+
 ## Subcommands
 
 ```text
@@ -250,9 +291,15 @@ hone/
 │   ├── code.yaml
 │   ├── swe.yaml
 │   ├── tune-code.yaml
-│   └── tune-swe.yaml
-├── docs/                  # install, quickstart, data, train, eval, architecture
+│   ├── tune-swe.yaml
+│   ├── smoke.yaml
+│   ├── smoke-kimi.yaml
+│   ├── soup-sft-codex-smoke.yaml   # Soup MLX smoke (32 iters / 30 s)
+│   └── soup-sft-codex-full.yaml    # Soup MLX full SFT (1 epoch / ~70 min)
+├── docs/                  # install, quickstart, data, train, eval, architecture, SOTA-EXPECTATIONS
 ├── todo/                  # per-phase acceptance criteria
+├── train-soup.sh          # Soup driver (smoke/full/gen/export/ship)
+├── soup_mlx_compat.py     # AutoTokenizer Llama-fallback for MLX without PyTorch
 ├── .github/workflows/ci.yml
 ├── pyproject.toml
 ├── CHANGELOG.md
