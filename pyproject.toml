@@ -1,66 +1,57 @@
 [project]
 name = "hone"
-version = "0.2.0"
-description = "Apple Silicon supervised fine-tuning pipeline — plug-and-play LoRA training on the M-series Mac."
+version = "0.3.0"
+description = "Soup-ready JSONL data preparation for supervised fine-tuning."
 requires-python = ">=3.12,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "Sachin" }]
 readme = "README.md"
-keywords = ["finetune", "lora", "mlx", "apple-silicon", "training"]
+keywords = ["soup", "finetune", "data-prep", "jsonl", "huggingface"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-  "pyyaml>=6.0",
-  "typer>=0.27.0",
+  "datasets>=5.0.1",
+  "huggingface-hub<1.0,>=0.34",
 ]
 
 [project.urls]
-Homepage = "https://github.com/sachncs/finetune"
-Repository = "https://github.com/sachncs/finetune"
-Issues = "https://github.com/sachncs/finetune/issues"
-
-[project.scripts]
-hone = "hone.cli:main"
+Homepage = "https://github.com/sachncs/hone"
+Repository = "https://github.com/sachncs/hone"
+Issues = "https://github.com/sachncs/hone/issues"
 
 [project.optional-dependencies]
 dev = [
   "mypy>=2.3.0",
   "pytest>=8.3",
   "ruff>=0.16.1",
-  "hypothesis>=6.100",
-  "click>=8.0",
 ]
-mlx = ["mlx-lm[train]>=0.29.0", "datasets>=5.0.1"]
-cuda = ["torch>=2.13.0", "datasets>=5.0.1", "transformers>=4.57.3,<5", "trl>=0.18", "peft>=0.14", "unsloth"]
+soup = ["soup-cli[mlx]"]
 
 [build-system]
 requires = ["setuptools>=70"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["hone", "hone.cli"]
+packages = ["hone", "hone.prepare"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
-markers = [
-  "mlx: requires Apple Silicon Metal backend",
-  "slow: takes more than 1 second",
-]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 88
 include = ["hone/**/*.py", "tests/**/*.py"]
-extend-exclude = ["build", "dist"]
+extend-exclude = ["build", "dist", "archive"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -77,21 +68,3 @@ ignore_missing_imports = true
 no_implicit_optional = true
 warn_return_any = true
 warn_unused_ignores = true
-
-[tool.vulture]
-# Whitelist false positives.
-
-# Typer-decorated commands. vulture sees the function body but not the
-# @app.command decorator's runtime registration.
-ignore_names = [
-  "hone.cli.__init__.entry",
-  "hone.cli.prepare.swe",
-  "hone.cli.train.swe",
-  # TrialResult.parameters is a public dataclass field.
-  "hone.cli.tune.TrialResult.parameters",
-  # pytestmark is the conventional module-level pytest marker.
-  "tests.integration.test_train.pytestmark",
-  "tests.mlx.test_run.pytestmark",
-  # MagicMock.__iter__ is set so `for row in fake_dataset` works.
-  "tests.integration.test_prepare.__iter__",
-]
