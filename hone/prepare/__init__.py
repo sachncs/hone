@@ -1,10 +1,7 @@
-"""Data preparation application layer.
+"""Soup-ready JSONL data preparation.
 
-Pure-Python orchestration for turning a HuggingFace dataset stream
-(or a local JSONL file) into a deterministic chat-format JSONL
-ready for the MLX trainer. The CLI in :mod:`hone.cli.prepare`
-imports only from here; downstream layers never touch HF or the
-tokenizer directly.
+Turns raw HuggingFace streams or local JSONL files into chat-format
+JSONL files that :mod:`soup-cli` consumes directly.
 
 Public surface:
 
@@ -14,11 +11,23 @@ Public surface:
 * :func:`prepare_stream` — materialize every row of an HF config
   with optional token-length filtering.
 * :func:`prepare_eval_prompts` — download LiveCodeBench prompts.
+
+This package has no CLI of its own; call its functions directly or
+through ``train-soup.sh`` / your own driver script.
+
+Errors raised by these functions are subclasses of
+:class:`PrepareError` (also exported here); the base class lets
+callers catch every prepare-layer failure with a single
+``except``.
 """
 
 from hone.prepare.service import (
+    DataError,
+    PrepareError,
     PrepareRequest,
     PrepareResult,
+    Role,
+    ValidationError,
     prepare_eval_prompts,
     prepare_local_file,
     prepare_reservoir_sample,
@@ -27,8 +36,12 @@ from hone.prepare.service import (
 )
 
 __all__ = [
+    "DataError",
+    "PrepareError",
     "PrepareRequest",
     "PrepareResult",
+    "Role",
+    "ValidationError",
     "prepare_eval_prompts",
     "prepare_local_file",
     "prepare_reservoir_sample",

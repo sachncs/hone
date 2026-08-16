@@ -1,43 +1,70 @@
-"""Prepare service — the application-layer orchestrator.
+"""Soup-ready JSONL preparation service.
 
-Five public functions, one per ``hone prepare`` subcommand:
+Each function takes a :class:`PrepareRequest` (output path, seed,
+logger) plus its own knobs and returns a :class:`PrepareResult`
+(written / skipped / filtered_long counts). The functions do not
+depend on any CLI, MLX, or fine-tuning layer; they only emit JSONL
+files that Soup's trainer reads directly.
 
-* :func:`prepare_local_file` — normalize and split a local JSONL.
-* :func:`prepare_reservoir_sample` — reservoir-sample an HF stream.
-* :func:`prepare_swe` — build SWE-bench SFT rows.
-* :func:`prepare_stream` — materialize every row of an HF config
-  with optional token-length filtering.
-* :func:`prepare_eval_prompts` — download LiveCodeBench prompts.
-
-Each function returns a :class:`PrepareResult` so the CLI can log
-counts and exit codes without inspecting private state. The CLI
-itself is a thin wrapper around these functions.
+All errors are subclasses of :class:`PrepareError` so the caller
+can catch one exception type.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import random
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from hone.errors import DataError, ValidationError
-from hone.jsonl import Writer
-from hone.normalize import Normalizer, SweNormalizer
 from hone.prepare.hf import HubStream, load_split
 from hone.prepare.mappers import as_codeforces_text, as_sft
 from hone.prepare.reservoir import Reservoir
 from hone.prepare.token_filter import TokenFilter, load_tokenizer
 
-Mapper = Callable[[dict[str, Any]], dict[str, Any] | None]
+
+class PrepareError(Exception):
+    """Base error for the prepare service.
+
+    All other prepare-layer errors inherit from this so callers
+    can catch a single exception type at the application boundary.
+    """
+
+
+class ValidationError(PrepareError):
+    """A record failed validation; ``location`` describes where."""
+
+
+class DataError(PrepareError):
+    """A dataset path is missing, malformed, or empty."""
+
+
+class Role(StrEnum):
+    """Chat roles accepted by every chat-format record we emit."""
+
+    system = "system"
+    user = "user"
+    assistant = "assistant"
+
+
+_ROLE_ALIASES: dict[str, Role] = {
+    "human": Role.user,
+    "user": Role.user,
+    "system": Role.system,
+    "assistant": Role.assistant,
+    "gpt": Role.assistant,
+    "bot": Role.assistant,
+}
 
 
 @dataclass(frozen=True)
 class PrepareResult:
-    """Summary of a prepare run, suitable for logging and tests."""
+    """Summary of one prepare run; safe to log directly."""
 
     written: int = 0
     skipped: int = 0
@@ -59,6 +86,96 @@ class PrepareRequest:
 
 
 # ---------------------------------------------------------------------------
+# JSONL writing + chat validation
+# ---------------------------------------------------------------------------
+
+
+def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> int:
+    """Write JSONL records with sorted keys; return count written."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with path.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+            written += 1
+    return written
+
+
+def _parse_chat(raw_messages: object, *, location: str) -> list[dict[str, str]]:
+    """Validate a ``messages`` list into the canonical chat schema.
+
+    Empty content, missing fields, and unknown roles all raise
+    :class:`ValidationError` with a positional ``location``.
+    """
+    if not isinstance(raw_messages, list):
+        raise ValidationError(
+            f"{location}: expected a list, got {type(raw_messages).__name__}"
+        )
+    out: list[dict[str, str]] = []
+    for index, raw_message in enumerate(raw_messages):
+        if not isinstance(raw_message, dict):
+            raise ValidationError(
+                f"{location}[{index}]: expected an object, "
+                f"got {type(raw_message).__name__}"
+            )
+        raw_role = raw_message.get("role")
+        content = raw_message.get("content")
+        if raw_role is None:
+            raise ValidationError(f"{location}[{index}]: missing 'role'")
+        if content is None:
+            raise ValidationError(f"{location}[{index}]: missing 'content'")
+        role = _ROLE_ALIASES.get(str(raw_role).lower())
+        if role is None:
+            raise ValidationError(
+                f"{location}[{index}].role: unknown role {raw_role!r}"
+            )
+        text = str(content).strip()
+        if not text:
+            raise ValidationError(f"{location}[{index}].content is empty")
+        out.append({"role": str(role), "content": text})
+    return out
+
+
+def _normalize_chat_record(
+    record: dict[str, object], *, location: str
+) -> dict[str, object]:
+    """Normalize one record to chat format or raise :class:`ValidationError`."""
+    raw_messages = record.get("messages")
+    if isinstance(raw_messages, list):
+        return {"messages": _parse_chat(raw_messages, location=location)}
+    if "prompt" in record and "completion" in record:
+        prompt_text = str(record["prompt"]).strip()
+        completion_text = str(record["completion"]).strip()
+        if not prompt_text or not completion_text:
+            raise ValidationError(
+                f"{location}: prompt or completion is empty after stripping"
+            )
+        return {
+            "messages": [
+                {"role": "user", "content": prompt_text},
+                {"role": "assistant", "content": completion_text},
+            ]
+        }
+    raise ValidationError(
+        f"{location}: expected 'messages' list or 'prompt'/'completion' pair"
+    )
+
+
+def _split_records(
+    records: list[dict[str, object]], ratio: float, seed: int
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Deterministic shuffled train/valid split; ratio must be in (0, 1)."""
+    if not 0 < ratio < 1:
+        raise DataError(f"--ratio must be between 0 and 1, got {ratio}")
+    if len(records) < 2:
+        raise DataError("at least two records are required")
+    shuffled = list(records)
+    random.Random(seed).shuffle(shuffled)
+    valid_count = max(1, round(len(shuffled) * ratio))
+    return shuffled[valid_count:], shuffled[:valid_count]
+
+
+# ---------------------------------------------------------------------------
 # prepare_local_file
 # ---------------------------------------------------------------------------
 
@@ -72,20 +189,12 @@ def prepare_local_file(
 ) -> PrepareResult:
     """Normalize and split a local JSONL file.
 
-    Args:
-        input_path: The source JSONL.
-        request: Output path, seed, optional logger.
-        ratio: Validation split ratio (exclusive 0..1).
-        max_samples: Optional cap on examples read; defaults to all.
+    ``max_samples`` caps how many records are read (after parsing,
+    before splitting); default is "read everything".
     """
     if max_samples is not None and max_samples < 2:
         raise DataError("--max-samples must be at least 2")
-    if not 0 < ratio < 1:
-        raise DataError(f"--ratio must be between 0 and 1, got {ratio}")
-
-    logger = request.logger
-    normalizer = Normalizer()
-    examples: list = []
+    records: list[dict[str, object]] = []
     with input_path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, 1):
             if not line.strip():
@@ -99,17 +208,21 @@ def prepare_local_file(
                     f"{input_path}:{line_number}: each record must be an object"
                 )
             try:
-                examples.append(normalizer.normalize(record))
+                records.append(
+                    _normalize_chat_record(
+                        record, location=f"{input_path}:{line_number}"
+                    )
+                )
             except ValidationError as error:
                 raise DataError(f"{input_path}:{line_number}: {error}") from error
     if max_samples is not None:
-        examples = examples[:max_samples]
+        records = records[:max_samples]
 
-    train, valid = _splitter(ratio, request.seed).split(examples)
-    train_count = Writer().write(request.output / "train.jsonl", train)
-    valid_count = Writer().write(request.output / "valid.jsonl", valid)
-    logger.info(
-        "wrote %d train and %d validation examples to %s",
+    train, valid = _split_records(records, ratio, request.seed)
+    train_count = _write_jsonl(request.output / "train.jsonl", train)
+    valid_count = _write_jsonl(request.output / "valid.jsonl", valid)
+    request.logger.info(
+        "wrote %d train and %d validation records to %s",
         train_count,
         valid_count,
         request.output,
@@ -136,7 +249,12 @@ def prepare_reservoir_sample(
     scan_limit: int = 250000,
     ratio: float = 0.02,
 ) -> PrepareResult:
-    """Reservoir-sample competitive-programming rows and split them."""
+    """Reservoir-sample competitive-programming rows and split them.
+
+    Scans up to ``scan_limit`` HF rows, keeps a uniform random sample
+    of ``max_samples`` rows in the language of choice, then splits
+    1 - ratio / ratio between train and valid.
+    """
     if max_samples < 2:
         raise DataError("--max-samples must be at least 2")
     if scan_limit < 1:
@@ -144,8 +262,7 @@ def prepare_reservoir_sample(
     if not 0 < ratio < 1:
         raise DataError(f"--ratio must be between 0 and 1, got {ratio}")
 
-    logger = request.logger
-    reservoir = Reservoir[dict[str, Any]](max_samples, seed=request.seed)
+    reservoir: Reservoir[dict[str, object]] = Reservoir(max_samples, seed=request.seed)
     seen = 0
     for row in HubStream(dataset, split=split):
         language_value = row.get("language")
@@ -155,26 +272,33 @@ def prepare_reservoir_sample(
         solution = str(row.get("solution", row.get("answer", ""))).strip()
         if len(question) < 80 or len(solution) < 20:
             continue
-        record = _wrap_problem(question, solution)
-        reservoir.observe(record)
+        reservoir.observe(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Solve this competitive-programming problem in Python. "
+                            "Return only the complete program.\n\n" + question
+                        ),
+                    },
+                    {"role": "assistant", "content": solution},
+                ]
+            }
+        )
         seen += 1
         if seen >= scan_limit:
             break
     if len(reservoir) < 2:
-        raise DataError("fewer than two usable examples found")
+        raise DataError("fewer than two usable records found")
 
     rows = reservoir.shuffle()
     valid_count = max(1, round(len(rows) * ratio))
-    request.output.mkdir(parents=True, exist_ok=True)
-    for name, values in (
-        ("train.jsonl", rows[valid_count:]),
-        ("valid.jsonl", rows[:valid_count]),
-    ):
-        with (request.output / name).open("w", encoding="utf-8") as handle:
-            for value in values:
-                handle.write(json.dumps(value, ensure_ascii=False) + "\n")
     train_count = len(rows) - valid_count
-    logger.info(
+    request.output.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(request.output / "train.jsonl", rows[valid_count:])
+    _write_jsonl(request.output / "valid.jsonl", rows[:valid_count])
+    request.logger.info(
         "selected %d of %d usable rows; wrote %d train and %d valid",
         len(reservoir),
         seen,
@@ -187,22 +311,6 @@ def prepare_reservoir_sample(
         valid_count=valid_count,
         extras={"seen": seen},
     )
-
-
-def _wrap_problem(question: str, solution: str) -> dict[str, Any]:
-    """Wrap a (question, solution) pair into a chat-format record."""
-    return {
-        "messages": [
-            {
-                "role": "user",
-                "content": (
-                    "Solve this competitive-programming problem in Python. "
-                    "Return only the complete program.\n\n" + question
-                ),
-            },
-            {"role": "assistant", "content": solution},
-        ]
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +327,12 @@ def prepare_swe(
     max_samples: int | None = None,
     max_chars: int = 14000,
 ) -> PrepareResult:
-    """Build SWE-bench SFT rows. Refuses non-train splits."""
+    """Build SWE-bench SFT rows; refuses non-train splits.
+
+    Each row becomes ``{"messages": [user, assistant]}`` where the
+    user message names repo + version + issue, and the assistant
+    message is the unified-diff patch.
+    """
     if split != "train":
         raise DataError("refusing non-train split; evaluation patches would leak")
     if not 0 < ratio < 1:
@@ -229,31 +342,62 @@ def prepare_swe(
     if max_chars < 1:
         raise DataError("--max-chars must be positive")
 
-    logger = request.logger
-    normalizer = SweNormalizer()
-    converted: list = []
+    converted: list[dict[str, object]] = []
     for row in load_split(dataset, split=split):
         try:
-            example = normalizer.normalize(row)
+            record = _normalize_swe_row(row)
         except ValidationError:
             continue
-        if example.character_count > max_chars:
+        messages = record["messages"]
+        if not isinstance(messages, list):
             continue
-        converted.append(example)
+        if sum(len(m["content"]) for m in messages if isinstance(m, dict)) > max_chars:
+            continue
+        converted.append(record)
         if max_samples is not None and len(converted) >= max_samples:
             break
     if len(converted) < 2:
-        raise DataError("not enough valid SWE examples")
+        raise DataError("not enough valid SWE rows")
 
-    train, valid = _splitter(ratio, request.seed).split(converted)
-    train_count = Writer().write(request.output / "train.jsonl", train)
-    valid_count = Writer().write(request.output / "valid.jsonl", valid)
-    logger.info("wrote %d train and %d validation rows", train_count, valid_count)
+    train, valid = _split_records(converted, ratio, request.seed)
+    train_count = _write_jsonl(request.output / "train.jsonl", train)
+    valid_count = _write_jsonl(request.output / "valid.jsonl", valid)
+    request.logger.info(
+        "wrote %d train and %d validation SWE rows", train_count, valid_count
+    )
     return PrepareResult(
         written=train_count + valid_count,
         train_count=train_count,
         valid_count=valid_count,
     )
+
+
+def _normalize_swe_row(row: dict[str, object]) -> dict[str, object]:
+    """Convert one SWE-bench row into a prompt + patch pair."""
+    statement = str(row.get("problem_statement", "")).strip()
+    if not statement:
+        raise ValidationError("missing problem_statement")
+    patch = str(row.get("patch", "")).strip()
+    if not patch:
+        raise ValidationError("missing patch")
+    prompt = (
+        "You are repairing a real software repository. Return only a unified "
+        "diff patch; do not explain the answer.\n\n"
+        f"Repository: {str(row.get('repo', '')).strip()}\n"
+        f"Version: {str(row.get('version', '')).strip()}\n\n"
+        f"Issue:\n{statement}"
+    )
+    metadata: dict[str, object] = {}
+    instance_id = row.get("instance_id")
+    if instance_id is not None:
+        metadata["instance_id"] = str(instance_id)
+    return {
+        "messages": [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": patch},
+        ],
+        **metadata,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -272,24 +416,18 @@ def prepare_stream(
     max_samples: int = 0,
     tokenizer_model: str = "openbmb/MiniCPM5-1B",
 ) -> PrepareResult:
-    """Materialize every row of an HF config as MLX JSONL.
+    """Materialize every row of an HF config as chat-format JSONL.
 
-    Args:
-        request: Output path, seed, optional logger.
-        repo: HuggingFace repo ID.
-        configs: Comma-separated list of HF configs to iterate.
-        split: HF split to use.
-        mode: ``"sft"`` for chat-format rows; ``"codeforces-text"`` for plain-text rows.
-        max_tokens: Drop records longer than this many tokens; ``0`` disables.
-        max_samples: Stop after this many rows are written; ``0`` means full pass.
-        tokenizer_model: HF model id used for token-count filtering.
+    ``mode='sft'`` produces ``{"messages": [...]}`` records; set
+    ``mode='codeforces-text'`` to emit ``{"text": ...}`` for plain-text
+    pre-training instead.
     """
     if mode not in {"sft", "codeforces-text"}:
         raise DataError(f"--mode must be 'sft' or 'codeforces-text', got {mode!r}")
     if max_tokens < 0:
         raise DataError(f"--max-tokens must be non-negative, got {max_tokens}")
 
-    logger = request.logger
+    request.logger.info("streaming repo=%s split=%s mode=%s", repo, split, mode)
     mapper = as_sft if mode == "sft" else _safe_codeforces
     tokenizer = load_tokenizer(tokenizer_model) if max_tokens > 0 else None
     filter_ = TokenFilter(max_tokens=max_tokens, tokenizer=tokenizer)
@@ -315,18 +453,20 @@ def prepare_stream(
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 written += 1
                 if written % 100_000 == 0:
-                    logger.info(
+                    request.logger.info(
                         "written=%d skipped=%d filtered_long=%d",
                         written,
                         skipped,
                         filtered_long,
                     )
                 if max_samples > 0 and written >= max_samples:
-                    logger.info("max-samples reached (%d), stopping early", max_samples)
+                    request.logger.info(
+                        "max-samples reached (%d), stopping early", max_samples
+                    )
                     break
                 if written % 5000 == 0 and time.monotonic() - last_log > 30.0:
                     elapsed = time.monotonic() - started
-                    logger.info(
+                    request.logger.info(
                         "heartbeat w=%d s=%d fl=%d t=%.0fs",
                         written,
                         skipped,
@@ -338,7 +478,7 @@ def prepare_stream(
                 continue
             break
     elapsed = time.monotonic() - started
-    logger.info(
+    request.logger.info(
         "complete: written=%d skipped=%d filtered_long=%d output=%s elapsed=%.1fs",
         written,
         skipped,
@@ -354,7 +494,7 @@ def prepare_stream(
     )
 
 
-def _safe_codeforces(row: dict[str, Any]) -> dict[str, Any] | None:
+def _safe_codeforces(row: dict[str, object]) -> dict[str, object] | None:
     """Wrap :func:`as_codeforces_text` and convert ``ValidationError`` to ``None``."""
     try:
         return as_codeforces_text(row)
@@ -408,22 +548,13 @@ def prepare_eval_prompts(
     return PrepareResult(written=written)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _splitter(ratio: float, seed: int) -> Any:
-    """In-memory splitter used by the local-file and SWE prepare paths."""
-    from hone.split import Splitter
-
-    return Splitter(ratio, seed)
-
-
 __all__ = [
-    "Mapper",
+    "DataError",
+    "PrepareError",
     "PrepareRequest",
     "PrepareResult",
+    "Role",
+    "ValidationError",
     "prepare_eval_prompts",
     "prepare_local_file",
     "prepare_reservoir_sample",

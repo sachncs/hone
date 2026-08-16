@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from hone.errors import ValidationError
-
 _PROMPT_KEYS: tuple[str, ...] = (
     "prompt",
     "input",
@@ -72,8 +70,8 @@ def as_sft(row: Mapping[str, object]) -> dict[str, object] | None:
 def as_codeforces_text(row: Mapping[str, object]) -> dict[str, object]:
     """Concatenate the five canonical Codeforces fields into ``{"text": ...}``.
 
-    Raises :class:`ValidationError` when no serializable problem
-    text is present so the prepare service can count and skip.
+    Raises :class:`ValueError` when no serializable problem text is
+    present so the prepare service can count and skip.
     """
     sections = [
         ("TITLE", row.get("title")),
@@ -88,12 +86,12 @@ def as_codeforces_text(row: Mapping[str, object]) -> dict[str, object]:
         if value and str(value).strip()
     )
     if not text.strip():
-        raise ValidationError("row has no serializable problem text")
+        raise ValueError("row has no serializable problem text")
     return {"text": text}
 
 
 def _messages_from_list(raw_messages: list[object]) -> list[dict[str, str]] | None:
-    """Translate a row's ``messages`` list into hone's chat schema."""
+    """Translate a row's ``messages`` list into the canonical chat schema."""
     out: list[dict[str, str]] = []
     for message in raw_messages:
         if not isinstance(message, Mapping):
