@@ -1,4 +1,4 @@
-"""Behavior tests for hone.split: Splitter and MIN_VALID."""
+"""Behavior tests for hone.split: Splitter, Partitioner, MIN_VALID."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from hone.errors import ValidationError
 from hone.model import Example, Message, Role
-from hone.split import MIN_VALID, Splitter, partition
+from hone.split import MIN_VALID, Splitter
+from hone.split import partition_file as partition
 
 
 def examples(count: int) -> list[Example]:
@@ -43,32 +45,32 @@ def lines(path: Path) -> list[str]:
 
 
 def test_splitter_rejects_ratio_zero() -> None:
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         Splitter(0.0, seed=42)
 
 
 def test_splitter_rejects_ratio_one() -> None:
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         Splitter(1.0, seed=42)
 
 
 def test_splitter_rejects_negative_ratio() -> None:
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         Splitter(-0.1, seed=42)
 
 
 def test_splitter_rejects_ratio_above_one() -> None:
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         Splitter(1.5, seed=42)
 
 
 def test_splitter_rejects_single_example() -> None:
-    with pytest.raises(ValueError, match="at least two examples"):
+    with pytest.raises(ValidationError, match="at least two examples"):
         Splitter(0.25, seed=42).split(examples(1))
 
 
 def test_splitter_rejects_empty_examples() -> None:
-    with pytest.raises(ValueError, match="at least two examples"):
+    with pytest.raises(ValidationError, match="at least two examples"):
         Splitter(0.25, seed=42).split([])
 
 
@@ -191,35 +193,35 @@ def test_partition_ratio_near_one_keeps_train_nonempty(tmp_path: Path) -> None:
 def test_partition_rejects_ratio_zero(tmp_path: Path) -> None:
     source = tmp_path / "source.jsonl"
     jsonl(source, 10)
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.0, 42)
 
 
 def test_partition_rejects_ratio_one(tmp_path: Path) -> None:
     source = tmp_path / "source.jsonl"
     jsonl(source, 10)
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 1.0, 42)
 
 
 def test_partition_rejects_negative_ratio(tmp_path: Path) -> None:
     source = tmp_path / "source.jsonl"
     jsonl(source, 10)
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", -0.1, 42)
 
 
 def test_partition_rejects_ratio_above_one(tmp_path: Path) -> None:
     source = tmp_path / "source.jsonl"
     jsonl(source, 10)
-    with pytest.raises(ValueError, match="ratio must be between"):
+    with pytest.raises(ValidationError, match="ratio must be between"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 1.5, 42)
 
 
 def test_partition_rejects_single_line(tmp_path: Path) -> None:
     source = tmp_path / "source.jsonl"
     jsonl(source, 1)
-    with pytest.raises(ValueError, match="at least two JSON lines"):
+    with pytest.raises(ValidationError, match="at least two JSON lines"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, 42)
 
 
@@ -228,7 +230,7 @@ def test_partition_rejects_malformed_line(tmp_path: Path) -> None:
     jsonl(source, 3)
     with source.open("a", encoding="utf-8") as handle:
         handle.write("this is not json\n")
-    with pytest.raises(ValueError, match=r":4:"):
+    with pytest.raises(ValidationError, match=r":4:"):
         partition(source, tmp_path / "train.jsonl", tmp_path / "valid.jsonl", 0.1, 42)
 
 
