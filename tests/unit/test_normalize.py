@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from hone.errors import ValidationError
 from hone.model import Role
 from hone.normalize import Normalizer, SweNormalizer
 
@@ -29,19 +30,19 @@ def test_normalize_messages_creates_message_list() -> None:
 
 
 def test_normalize_messages_rejects_non_object() -> None:
-    with pytest.raises(ValueError, match=r"messages\[\d+\] must be an object"):
+    with pytest.raises(ValidationError, match=r"must be an object"):
         Normalizer().normalize({"messages": [{"role": "user", "content": "ok"}, "bad"]})
 
 
 def test_normalize_messages_rejects_missing_role() -> None:
-    with pytest.raises(ValueError, match="messages\\[0\\] is missing 'role'"):
+    with pytest.raises(ValidationError, match=r"missing 'role'"):
         Normalizer().normalize(
             {"messages": [{"content": "ok"}, {"role": "assistant", "content": "a"}]}
         )
 
 
 def test_normalize_messages_rejects_missing_content() -> None:
-    with pytest.raises(ValueError, match="messages\\[0\\] is missing 'content'"):
+    with pytest.raises(ValidationError, match=r"missing 'content'"):
         Normalizer().normalize(
             {"messages": [{"role": "user"}, {"role": "assistant", "content": "a"}]}
         )
@@ -66,7 +67,7 @@ def test_normalize_accepts_system_user_assistant() -> None:
 
 def test_normalize_rejects_missing_prompt_and_messages() -> None:
     with pytest.raises(
-        ValueError, match="expected 'messages' list or 'prompt'/'completion'"
+        ValidationError, match="expected 'messages' list or 'prompt'/'completion'"
     ):
         Normalizer().normalize({"foo": "bar"})
 
@@ -78,12 +79,12 @@ def test_normalize_strips_surrounding_whitespace() -> None:
 
 
 def test_swe_rejects_missing_problem_statement() -> None:
-    with pytest.raises(ValueError, match="missing problem_statement"):
+    with pytest.raises(ValidationError, match="missing problem_statement"):
         SweNormalizer().normalize({"instance_id": "i", "patch": "p"})
 
 
 def test_swe_rejects_missing_patch() -> None:
-    with pytest.raises(ValueError, match="missing patch"):
+    with pytest.raises(ValidationError, match="missing patch"):
         SweNormalizer().normalize({"instance_id": "i", "problem_statement": "p"})
 
 
