@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from hone.config import REQUIRED_KEYS, load, save, validate
+from hone.errors import ConfigError, HoneError
 
 
 def test_load_reads_yaml_file(tmp_path: Path) -> None:
@@ -20,18 +21,32 @@ def test_load_raises_on_missing_file(tmp_path: Path) -> None:
         load(tmp_path / "missing.yaml")
 
 
+def test_load_raises_on_non_mapping(tmp_path: Path) -> None:
+    path = tmp_path / "list.yaml"
+    path.write_text("- 1\n- 2\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="expected a YAML mapping"):
+        load(path)
+
+
+def test_load_raises_on_invalid_yaml(tmp_path: Path) -> None:
+    path = tmp_path / "bad.yaml"
+    path.write_text("model: m\n  train: true\ndata: d\n", encoding="utf-8")
+    with pytest.raises(HoneError):
+        load(path)
+
+
 def test_validate_rejects_missing_model() -> None:
-    with pytest.raises(ValueError, match="model"):
+    with pytest.raises(ConfigError, match="model"):
         validate({"train": True, "data": "d"})
 
 
 def test_validate_rejects_missing_train() -> None:
-    with pytest.raises(ValueError, match="train"):
+    with pytest.raises(ConfigError, match="train"):
         validate({"model": "m", "data": "d"})
 
 
 def test_validate_rejects_missing_data() -> None:
-    with pytest.raises(ValueError, match="data"):
+    with pytest.raises(ConfigError, match="data"):
         validate({"model": "m", "train": True})
 
 
