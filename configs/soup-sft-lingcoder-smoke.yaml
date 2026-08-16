@@ -1,0 +1,38 @@
+# Soup config — 32-iter Ling-Coder smoke
+#
+# IMPORTANT: Soup MLX computes iters = epochs * rows/batch_size,
+# IGNORING the explicit `iters` field. So this config uses a
+# dedicated 32-row smoke-train.jsonl so the run finishes in ~30s.
+# The real Ling-Coder data (28500 rows) is at
+# data/soup/lingcoder/train.jsonl for full training.
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/lingcoder/smoke-train.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  iters: 50
+  lr: 1.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 5
+  save_steps: 25
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-lingcoder-smoke

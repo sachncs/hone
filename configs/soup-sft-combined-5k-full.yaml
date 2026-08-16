@@ -1,0 +1,47 @@
+# Soup config — combined CodeX + Ling-Coder SFT, 5000-row stratified subset
+#
+# Why this exists:
+#   Soup MLX computes iters = epochs * rows/batch_size. With the
+#   full 123.5k-row combined corpus that's 123500 iters ≈ 34 hours
+#   on M3 Pro 18 GB. The 5000-row stratified subset (3850 CodeX +
+#   1150 Ling-Coder, ratio preserved) keeps the run to ~80 minutes
+#   while still covering both data distributions.
+#
+# Prereqs:
+#   uv pip install "soup-cli[mlx]==0.73.2" "transformers>=4.57,<5" "huggingface-hub<1.0,>=0.34"
+#
+# Run from the hone repo root:
+#   uv run soup train --config configs/soup-sft-combined-5k-full.yaml --yes
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/combined_5k.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  # NOTE: Soup MLX ignores this field and computes iters from
+  # epochs * rows/batch_size. With 5000 rows / batch 1 = 5000 iters.
+  iters: 5000
+  lr: 2.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 50
+  save_steps: 1000
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-combined-5k-full

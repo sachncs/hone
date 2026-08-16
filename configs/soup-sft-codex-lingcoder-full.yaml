@@ -1,0 +1,53 @@
+# Soup config — full SFT on CodeX + Ling-Coder for the SOTA push
+#
+# Same recipe as configs/soup-sft-codex-full.yaml but with the
+# combined data set under data/soup/combined/. ~123.5k rows total.
+# Expected ~90 min on M3 Pro 18 GB.
+#
+# Prereqs:
+#   uv pip install "soup-cli[mlx]==0.73.2" "transformers>=4.57,<5" "huggingface-hub<1.0,>=0.34"
+#   python -c "from hone.prepare import prepare_lingsard, prepare_reservoir_sample, PrepareRequest; ..."
+#   # or use ./train-soup.sh full-combined
+#
+# Run from the hone repo root:
+#   uv run soup train --config configs/soup-sft-codex-lingcoder-full.yaml --yes
+#
+# Notes vs the CodeX-only full recipe:
+#   * data path points at data/soup/combined/ which mixes 95k CodeX
+#     with 28.5k Ling-Coder (Python only). Ling-Coder rows are
+#     shorter on average (~1200 chars vs CodeX's ~2300), so
+#     seq_len 2048 still covers most rows.
+#   * iters raised to 8000 to cover the larger corpus. At the same
+#     ~1.3 iter/s the wall-clock is ~100 min vs the CodeX-only ~70.
+#   * everything else (LoRA r=16, lr 2e-5, mask_prompt) is unchanged.
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/combined/train.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  iters: 8000
+  lr: 2.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 50
+  save_steps: 1000
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-codex-lingcoder-full
