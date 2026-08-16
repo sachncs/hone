@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   stage, runnable via `setup.sh` (auto-skipped when
   `data/full/kimi/train.jsonl` is absent). Uses
   `openbmb/MiniCPM5-1B` to match the production training path.
+- Soup driver: `train-soup.sh {smoke,full,gen,export,ship}` trains
+  `openbmb/MiniCPM5-1B-MLX` on `data/full/codex/` via
+  `soup train --backend mlx`, fuses LoRA into the base for
+  deployment, and exposes Soup's `soup ship` regression gate.
+  Configs at `configs/soup-sft-codex-{smoke,full}.yaml`. Measured
+  peak memory on M3 Pro 18 GB: **7.4 GB at smoke / 8.9 GB at 256-row
+  validation**. Smoke run writes 32 iters / 30 s; full run ~70 min.
+  See `docs/SOTA-EXPECTATIONS.md` for honest expectations — this
+  pipeline gives a strong small-model coding SFT, not a leaderboard
+  SOTA.
+- `soup_mlx_compat.py`: a 30-line `AutoTokenizer.from_pretrained`
+  shim that falls back to `LlamaTokenizerFast` when transformers
+  4.57 cannot resolve `TokenizersBackend` without a PyTorch
+  backend. `setup.sh` installs it as a `.pth` sitecustomize so
+  `mlx_lm.generate` works in the MLX-only venv.
 
 ### Changed
 - Renamed public API to comply with the single-word identifier
