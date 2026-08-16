@@ -30,7 +30,7 @@ Issues = "https://github.com/sachncs/hone/issues"
 [project.optional-dependencies]
 dev = [
   "mypy>=2.3.0",
-  "pytest>=8.3",
+  "pytest>=9.1.1",
   "ruff>=0.16.1",
 ]
 soup = ["soup-cli[mlx]"]
