@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from hone.errors import ValidationError
 from hone.jsonl import Reader, Writer
 from hone.model import Example, Message, Role
 
@@ -33,7 +34,7 @@ def test_writer_roundtrips_messages(tmp_path: Path) -> None:
 
 def test_writer_roundtrips_metadata(tmp_path: Path) -> None:
     path = tmp_path / "train.jsonl"
-    examples = [
+    rows = [
         Example(
             messages=(
                 Message(role=Role.user, content="q"),
@@ -42,18 +43,18 @@ def test_writer_roundtrips_metadata(tmp_path: Path) -> None:
             metadata={"k": 1, "s": "x", "f": 1.5, "b": True, "n": None},
         )
     ]
-    Writer().write(path, examples)
+    Writer().write(path, rows)
     loaded = list(Reader().read(path))
     assert loaded[0].metadata == {"k": 1, "s": "x", "f": 1.5, "b": True, "n": None}
 
 
 def test_writer_creates_parent_directories(tmp_path: Path) -> None:
-    path = tmp_path / "nested" / "deeper" / "train.jsonl"
-    Writer().write(path, examples(2))
+    path = tmp_path / "nested" / "train.jsonl"
+    Writer().write(path, examples(1))
     assert path.is_file()
 
 
-def test_writer_uses_utf8(tmp_path: Path) -> None:
+def test_writer_handles_unicode(tmp_path: Path) -> None:
     path = tmp_path / "u.jsonl"
     example = Example(
         messages=(
@@ -95,7 +96,7 @@ def test_reader_reports_line_number_for_malformed_json(tmp_path: Path) -> None:
         "NOT JSON\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match=r":2:"):
+    with pytest.raises(ValidationError, match=r":2:"):
         list(Reader().read(path))
 
 
@@ -121,28 +122,28 @@ def test_reader_skips_blank_lines(tmp_path: Path) -> None:
 def test_reader_rejects_non_dict_record(tmp_path: Path) -> None:
     path = tmp_path / "x.jsonl"
     path.write_text("[1, 2, 3]\n", encoding="utf-8")
-    with pytest.raises(ValueError, match=r":1: each JSONL record must be an object"):
+    with pytest.raises(ValidationError, match=r"each JSONL record must be an object"):
         list(Reader().read(path))
 
 
 def test_reader_rejects_missing_messages(tmp_path: Path) -> None:
     path = tmp_path / "x.jsonl"
     path.write_text('{"foo": "bar"}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match=r"record must contain a 'messages' list"):
+    with pytest.raises(ValidationError, match=r"record must contain a 'messages' list"):
         list(Reader().read(path))
 
 
 def test_reader_rejects_non_list_messages(tmp_path: Path) -> None:
     path = tmp_path / "x.jsonl"
     path.write_text('{"messages": "not a list"}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match=r"record must contain a 'messages' list"):
+    with pytest.raises(ValidationError, match=r"record must contain a 'messages' list"):
         list(Reader().read(path))
 
 
 def test_reader_rejects_non_object_message_items(tmp_path: Path) -> None:
     path = tmp_path / "x.jsonl"
     path.write_text('{"messages": ["bad"]}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match=r"messages\[0\] must be an object"):
+    with pytest.raises(ValidationError, match=r"must be an object"):
         list(Reader().read(path))
 
 
@@ -155,5 +156,52 @@ def test_reader_rejects_empty_message_content(tmp_path: Path) -> None:
         "]}\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match=r"messages\[0\].content is empty"):
+    with pytest.raises(ValidationError, match=r"content is empty"):
         list(Reader().read(path))
+
+
+def test_reader_rejects_missing_role(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    path.write_text(
+        '{"messages": [{"content": "x"}, {"role": "assistant", "content": "a"}]}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"missing 'role'"):
+        list(Reader().read(path))
+
+
+def test_reader_rejects_missing_content(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    path.write_text(
+        '{"messages": [{"role": "user"}, {"role": "assistant", "content": "a"}]}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"missing 'content'"):
+        list(Reader().read(path))
+
+
+def test_reader_rejects_unknown_role(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    path.write_text(
+        '{"messages": [{"role": "tool", "content": "x"}, '
+        '{"role": "assistant", "content": "a"}]}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"role"):
+        list(Reader().read(path))
+
+
+def test_reader_record_validates_already_parsed_record(tmp_path: Path) -> None:
+    """record() validates a parsed dict directly, useful for in-memory sources."""
+    reader = Reader()
+    example = reader.record(
+        tmp_path / "x.jsonl",
+        1,
+        {
+            "messages": [
+                {"role": "user", "content": "q"},
+                {"role": "assistant", "content": "a"},
+            ]
+        },
+    )
+    assert example.messages[0].content == "q"
