@@ -1,97 +1,43 @@
-"""MLX device launcher entry point.
+"""MLX training launcher entry point.
 
-Reads HONE_DEVICE, selects the MLX backend explicitly, verifies
-Metal is available when GPU is requested, logs the active
-accelerator, then delegates to the upstream mlx_lm.lora CLI.
+This is the canonical training entry point for the Apple-Silicon
+backend. The CLI and the tune runner invoke
+``python -m hone.run --config <path>`` so device selection is
+verified and audited in one place.
 
-This is the canonical training launcher for the Apple-Silicon
-backend. Every training entry point (hone train, hone tune)
-invokes 'python -m hone.run --config <path>' so device selection
-is verified and audited in one place.
+The module is a thin wrapper around :class:`hone.backends.MlxBackend`;
+the heavy lifting (Metal check, device selection, GPU logging)
+lives there.
 """
 
 from __future__ import annotations
 
-import logging
-import os
-from typing import Any
+import sys
 
-import mlx.core as mx
-
+from hone.backends import MlxBackend
 from hone.log import setup
-
-DEVICES: frozenset[str] = frozenset({"cpu", "gpu"})
-
-
-def device() -> str:
-    """Return the device name requested by HONE_DEVICE."""
-    name = os.environ.get("HONE_DEVICE", "gpu").lower()
-    if name not in DEVICES:
-        raise ValueError(f"HONE_DEVICE must be one of {sorted(DEVICES)}, got {name!r}")
-    return name
-
-
-def metal() -> bool:
-    """Return whether MLX can drive a Metal GPU on this host."""
-    return bool(getattr(mx.metal, "is_available", lambda: False)())
-
-
-def gpu() -> dict[str, Any]:
-    """Return the active GPU device info across MLX versions.
-
-    Newer MLX exposes mx.device_info; older releases only expose
-    mx.metal.device_info. Use whichever is available.
-    """
-    getter = getattr(mx, "device_info", None)
-    if callable(getter):
-        return dict(getter())
-    return dict(mx.metal.device_info())
-
-
-def select(logger: logging.Logger) -> None:
-    """Select and verify the MLX device requested by HONE_DEVICE.
-
-    The selected device is installed as the MLX default and the
-    Metal device identity is logged so the active accelerator is
-    auditable from the training log. A clear error is raised when
-    GPU is requested but Metal is unavailable, so the pipeline
-    never silently degrades to CPU.
-    """
-    name = device()
-    if name == "gpu":
-        if not metal():
-            raise RuntimeError(
-                "HONE_DEVICE=gpu was requested but Metal is unavailable "
-                "on this host. This pipeline targets Apple Silicon; either "
-                "run on a machine with a supported GPU or set "
-                "HONE_DEVICE=cpu to fall back to the CPU backend."
-            )
-        device_type = mx.DeviceType.gpu
-        device_label = "Metal GPU"
-    else:
-        device_type = mx.DeviceType.cpu
-        device_label = "CPU"
-    mx.set_default_device(mx.Device(device_type, 0))
-    logger.info("MLX device: %s (HONE_DEVICE=%s)", device_label, name)
-    if name == "gpu":
-        info = gpu()
-        memory_size = info.get("memory_size", 0)
-        logger.info(
-            "Metal device: %s, memory=%d bytes, architecture=%s",
-            info.get("device_name", "unknown"),
-            int(memory_size) if isinstance(memory_size, int) else 0,
-            info.get("architecture", "unknown"),
-        )
 
 
 def main() -> None:
     """Configure the device, then delegate to the MLX LoRA CLI."""
     logger = setup(verbose=False)
-    select(logger)
+    backend = MlxBackend()
+    backend.select(logger)
     from mlx_lm.lora import main as mlx_lora_main
 
-    mlx_lora_main()
+    try:
+        mlx_lora_main()
+    except SystemExit as exit_event:
+        if exit_event.code not in (None, 0):
+            raise SystemExit(int(exit_event.code)) from exit_event
+        return
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as error:  # pragma: no cover - defensive
+        print(f"hone.run: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
