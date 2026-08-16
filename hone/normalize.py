@@ -1,53 +1,49 @@
-"""Source-record normalizers that produce Example objects."""
+"""Source-record normalizers that produce :class:`~hone.model.Example`.
+
+Two concrete normalizers today:
+
+* :class:`Normalizer` — accepts chat-format or prompt/completion
+  records and emits a uniform ``Example``.
+* :class:`SweNormalizer` — converts SWE-bench rows into
+  patch-generation examples.
+
+Both raise :class:`~hone.errors.ValidationError` for malformed
+input so the CLI layer can catch a single exception class.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
-from hone.model import Example, Message, Role
-from hone.types import JsonScalar
+from hone.chat import parse_messages
+from hone.errors import ValidationError
+from hone.model import Example, JsonScalar, Message, Role
 
 
 class Normalizer:
     """Normalize chat or prompt/completion records into one data contract."""
 
     def normalize(self, record: Mapping[str, object]) -> Example:
-        """Convert a source record or raise a descriptive validation error."""
-        raw_messages = record.get("messages")
-        if isinstance(raw_messages, list):
-            return Example(messages=self.chat(raw_messages), metadata={})
+        """Convert a source record or raise :class:`ValidationError`."""
+        if "messages" in record:
+            messages = parse_messages(record["messages"], location="messages")
+            return Example(messages=messages, metadata={})
         if "prompt" in record and "completion" in record:
-            return Example(
-                messages=(
-                    Message(Role.user, str(record["prompt"])),
-                    Message(Role.assistant, str(record["completion"])),
-                ),
-                metadata={},
-            )
-        raise ValueError("expected 'messages' list or 'prompt'/'completion' pair")
+            return self._from_prompt_completion(record)
+        raise ValidationError("expected 'messages' list or 'prompt'/'completion' pair")
 
     @staticmethod
-    def chat(raw_messages: list[object]) -> tuple[Message, ...]:
-        """Validate a chat-style messages list into a tuple of Message.
-
-        Public per AGENTS.md no-semi-private rule. Treat as the
-        chat-format implementation of normalize; prefer normalize
-        for new call sites.
-        """
-        messages: list[Message] = []
-        for index, raw in enumerate(raw_messages):
-            if not isinstance(raw, Mapping):
-                raise ValueError(f"messages[{index}] must be an object")
-            if "role" not in raw:
-                raise ValueError(f"messages[{index}] is missing 'role'")
-            if "content" not in raw:
-                raise ValueError(f"messages[{index}] is missing 'content'")
-            try:
-                role = Role(str(raw["role"]))
-            except ValueError as error:
-                raise ValueError(f"messages[{index}].role: {error}") from error
-            messages.append(Message(role=role, content=str(raw["content"])))
-        return tuple(messages)
+    def _from_prompt_completion(record: Mapping[str, object]) -> Example:
+        """Build a 2-message Example from a prompt/completion pair."""
+        prompt = str(record["prompt"])
+        completion = str(record["completion"])
+        return Example(
+            messages=(
+                Message(Role.user, prompt),
+                Message(Role.assistant, completion),
+            ),
+            metadata={},
+        )
 
 
 class SweNormalizer:
@@ -57,10 +53,10 @@ class SweNormalizer:
         """Build a prompt containing repository context and the issue text."""
         statement = str(record.get("problem_statement", "")).strip()
         if not statement:
-            raise ValueError("missing problem_statement")
+            raise ValidationError("missing problem_statement")
         patch = str(record.get("patch", "")).strip()
         if not patch:
-            raise ValueError("missing patch")
+            raise ValidationError("missing patch")
         prompt = (
             "You are repairing a real software repository. Return only a unified "
             "diff patch; do not explain the answer.\n\n"
@@ -79,3 +75,6 @@ class SweNormalizer:
             ),
             metadata=metadata,
         )
+
+
+__all__ = ["Normalizer", "SweNormalizer"]
