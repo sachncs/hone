@@ -511,6 +511,91 @@ def _iter_configs(configs: Iterable[str] | str) -> Iterator[str]:
 
 
 # ---------------------------------------------------------------------------
+# prepare_lingsard
+# ---------------------------------------------------------------------------
+
+
+def prepare_lingsard(
+    *,
+    request: PrepareRequest,
+    dataset: str = "inclusionAI/Ling-Coder-SFT",
+    split: str = "train",
+    max_samples: int = 30_000,
+    max_chars: int = 8_000,
+    ratio: float = 0.05,
+    language_filter: str = "Python",
+) -> PrepareResult:
+    """Stream + filter + split the inclusionAI/Ling-Coder-SFT dataset.
+
+    Distinct from :func:`prepare_stream`: Ling-Coder rows are
+    already in ``{"messages": [...]}`` chat format, so we skip
+    row mapping. We also filter by ``languages`` field (most
+    rows are Python-only; a minority are multi-language) and
+    drop rows whose combined message length exceeds ``max_chars``
+    so the trainer never sees a long-tail record.
+    """
+    from hone.prepare.hf import HubStream
+
+    if max_samples < 2:
+        raise DataError("--max-samples must be at least 2")
+    if max_chars < 1:
+        raise DataError("--max-chars must be positive")
+    if not 0 < ratio < 1:
+        raise DataError(f"--ratio must be between 0 and 1, got {ratio}")
+
+    request.logger.info(
+        "streaming dataset=%s split=%s language=%s", dataset, split, language_filter
+    )
+
+    converted: list[dict[str, object]] = []
+    seen = 0
+    for row in HubStream(dataset, split=split):
+        seen += 1
+        languages = row.get("languages") or []
+        if (
+            isinstance(languages, list)
+            and language_filter
+            and language_filter not in languages
+        ):
+            continue
+        raw_messages = row.get("messages")
+        if not isinstance(raw_messages, list):
+            continue
+        try:
+            messages = _parse_chat(raw_messages, location=f"{dataset}:{seen}")
+        except ValidationError:
+            continue
+        if sum(len(m["content"]) for m in messages) > max_chars:
+            continue
+        record: dict[str, object] = {"messages": messages}
+        converted.append(record)
+        if len(converted) >= max_samples:
+            break
+
+    if len(converted) < 2:
+        raise DataError(
+            f"not enough usable Ling-Coder rows ({len(converted)}); "
+            f"raise --max-tokens / --scan-limit or relax --max-chars"
+        )
+
+    train, valid = _split_records(converted, ratio, request.seed)
+    train_count = _write_jsonl(request.output / "train.jsonl", train)
+    valid_count = _write_jsonl(request.output / "valid.jsonl", valid)
+    request.logger.info(
+        "scanned %d rows; wrote %d train and %d valid Ling-Coder rows",
+        seen,
+        train_count,
+        valid_count,
+    )
+    return PrepareResult(
+        written=train_count + valid_count,
+        train_count=train_count,
+        valid_count=valid_count,
+        extras={"scanned": seen},
+    )
+
+
+# ---------------------------------------------------------------------------
 # prepare_eval_prompts
 # ---------------------------------------------------------------------------
 
@@ -556,6 +641,7 @@ __all__ = [
     "Role",
     "ValidationError",
     "prepare_eval_prompts",
+    "prepare_lingsard",
     "prepare_local_file",
     "prepare_reservoir_sample",
     "prepare_stream",
