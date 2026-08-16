@@ -6,6 +6,7 @@ import dataclasses
 
 import pytest
 
+from hone.errors import ValidationError
 from hone.model import Example, Message, Meta, Role
 
 
@@ -26,12 +27,12 @@ def test_role_serializes_to_string() -> None:
 
 
 def test_message_rejects_empty_content() -> None:
-    with pytest.raises(ValueError, match="content cannot be empty"):
+    with pytest.raises(ValidationError, match="content cannot be empty"):
         Message(role=Role.user, content="")
 
 
 def test_message_rejects_whitespace_only_content() -> None:
-    with pytest.raises(ValueError, match="content cannot be empty"):
+    with pytest.raises(ValidationError, match="content cannot be empty"):
         Message(role=Role.user, content="   \t\n")
 
 
@@ -53,13 +54,13 @@ def test_message_is_immutable() -> None:
 
 def test_example_requires_at_least_two_messages() -> None:
     single = Message(role=Role.user, content="q")
-    with pytest.raises(ValueError, match="at least two messages"):
+    with pytest.raises(ValidationError, match="at least two messages"):
         Example(messages=(single,), metadata={})
 
 
 def test_example_requires_assistant_last() -> None:
     user = Message(role=Role.user, content="q")
-    with pytest.raises(ValueError, match="must end with an assistant message"):
+    with pytest.raises(ValidationError, match="must end with an assistant message"):
         Example(messages=(user, user), metadata={})
 
 
