@@ -1,4 +1,15 @@
-"""Streaming JSONL persistence for validated training examples."""
+"""Streaming JSONL persistence for validated training examples.
+
+Two responsibilities, two classes:
+
+* :class:`Reader` — stream a JSONL file and yield validated
+  :class:`~hone.model.Example` records, raising
+  :class:`~hone.errors.ValidationError` with a ``<path>:<line>``
+  prefix on any malformed input.
+* :class:`Writer` — write a stream of :class:`~hone.model.Example`
+  records to a UTF-8 JSONL file with sorted keys for deterministic
+  output.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +17,11 @@ import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from hone.model import Example, Message, Role
-from hone.types import JsonScalar
+from hone.chat import parse_messages
+from hone.errors import ValidationError
+from hone.model import Example, JsonScalar
+
+_Location = str
 
 
 class Reader:
@@ -16,8 +30,8 @@ class Reader:
     def read(self, path: Path) -> Iterator[Example]:
         """Yield validated examples; raise on malformed lines.
 
-        Each error message is prefixed with `<path>:<line>: ...` so
-        callers can locate the offending record quickly.
+        Each error message is prefixed with ``<path>:<line>: ...``
+        so callers can locate the offending record quickly.
         """
         with path.open(encoding="utf-8") as input_file:
             for line_number, line in enumerate(input_file, 1):
@@ -26,58 +40,33 @@ class Reader:
                 try:
                     record = json.loads(line)
                 except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}:{line_number}: {error}") from error
-                yield self.record(path, line_number, record)
+                    raise ValidationError(f"{path}:{line_number}: {error}") from error
+                yield self._record(path, line_number, record)
 
     def record(self, path: Path, line_number: int, record: object) -> Example:
         """Validate one parsed JSON record into an Example.
 
-        Public per AGENTS.md no-semi-private rule. Exposed for
-        callers that already hold a parsed record and want to
-        reuse the same validation logic as read().
+        Public per the no-semi-private rule: callers that already
+        hold a parsed record can reuse the same validation logic
+        used by :meth:`read`.
         """
+        return self._record(path, line_number, record)
+
+    def _record(self, source: Path, line_number: int, record: object) -> Example:
+        location: _Location = f"{source}:{line_number}"
         if not isinstance(record, dict):
-            raise ValueError(
-                f"{path}:{line_number}: each JSONL record must be an object"
-            )
+            raise ValidationError(f"{location}: each JSONL record must be an object")
         raw_messages = record.get("messages")
         if not isinstance(raw_messages, list):
-            raise ValueError(
-                f"{path}:{line_number}: record must contain a 'messages' list"
-            )
-        messages: list[Message] = []
-        for index, raw_message in enumerate(raw_messages):
-            if not isinstance(raw_message, dict):
-                raise ValueError(
-                    f"{path}:{line_number}: messages[{index}] must be an object"
-                )
-            if "role" not in raw_message:
-                raise ValueError(
-                    f"{path}:{line_number}: messages[{index}] is missing 'role'"
-                )
-            if "content" not in raw_message:
-                raise ValueError(
-                    f"{path}:{line_number}: messages[{index}] is missing 'content'"
-                )
-            try:
-                role = Role(str(raw_message["role"]))
-            except ValueError as error:
-                raise ValueError(
-                    f"{path}:{line_number}: messages[{index}].role: {error}"
-                ) from error
-            content = str(raw_message["content"])
-            if not content.strip():
-                raise ValueError(
-                    f"{path}:{line_number}: messages[{index}].content is empty"
-                )
-            messages.append(Message(role=role, content=content))
+            raise ValidationError(f"{location}: record must contain a 'messages' list")
+        messages = parse_messages(raw_messages, location=location)
         metadata: dict[str, JsonScalar] = {
             key: value
             for key, value in record.items()
             if key != "messages"
             and isinstance(value, (str, int, float, bool, type(None)))
         }
-        return Example(messages=tuple(messages), metadata=metadata)
+        return Example(messages=messages, metadata=metadata)
 
 
 class Writer:
@@ -99,3 +88,6 @@ class Writer:
                 )
                 written += 1
         return written
+
+
+__all__ = ["Reader", "Writer"]
