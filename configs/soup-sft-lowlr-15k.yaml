@@ -1,0 +1,59 @@
+# Soup config — lower-LR + more iters on the combined CodeX+Ling corpus
+#
+# Why this exists:
+#   docs/ABLATION-REPORT.md ranked this as the highest-value
+#   follow-up: 'lower LR + more iters (1e-5 x 15K iters) is most
+#   likely to flip the wash into a clear MBPP gain without
+#   HumanEval regression.' The previous 5K SFT used lr=2e-5
+#   which is too aggressive for a 1B model and may have caused
+#   the HumanEval regression (-1.2pp).
+#
+# Recipe:
+#   * Same base + adapter config as configs/soup-sft-combined-5k-full.yaml.
+#   * lr dropped from 2e-5 to 1e-5 (the user-specified change).
+#   * Data: 16000 stratified CodeX+Ling rows (12350 + 3650, the
+#     3.3:1 ratio preserved) so Soup's iters = epochs * rows / batch
+#     computation lands at 15200 (~3 hours wall-clock at 1.4 iter/s
+#     on M3 Pro 18 GB).
+#   * No curriculum (Soup MLX doesn't support --resume; see the
+#     revert commit that dropped the curriculum configs).
+#
+# IMPORTANT: Soup MLX computes iters = epochs * rows/batch_size,
+# IGNORING the explicit `iters` field. The 16000-row data file
+# produces 15200 Soup iters for ~3 hours of training.
+#
+# Run from the hone repo root:
+#   uv run soup train --config configs/soup-sft-lowlr-15k.yaml --yes
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/combined_16k.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  # Lower than the 5K experiment (2e-5 -> 1e-5). The previous
+  # wash on HumanEval is consistent with over-aggressive LR
+  # shifting the model away from function-completion patterns.
+  lr: 1.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 100
+  save_steps: 2000
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-lowlr-15k
