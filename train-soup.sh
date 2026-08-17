@@ -8,6 +8,7 @@
 #   ./train-soup.sh full                  # full CodeX run, ~70 min on M3 Pro 18 GB
 #   ./train-soup.sh full-combined         # full CodeX+Ling-Coder, ~80 min (5K subset)
 #   ./train-soup.sh full-lowlr            # full CodeX+Ling-Coder, ~3 hr (16K subset, lr=1e-5)
+#   ./train-soup.sh full-nemotron         # 4-source SFT, ~4 hr (60K subset, lr=1e-5)
 #   ./train-soup.sh gen "prompt"          # single-prompt generation via mlx_lm
 #   ./train-soup.sh export                # fuse LoRA into base for deployment
 #   ./train-soup.sh ship                  # `soup ship` regression gate (needs PyTorch)
@@ -112,6 +113,31 @@ case "$ACTION" in
         echo "          ./train-soup.sh export       # fuse + merge"
         echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
         ;;
+    full-nemotron)
+        if [[ "${SOUP_SKIP_SMOKE:-0}" != "1" ]]; then
+            echo "==> running smoke validation first (set SOUP_SKIP_SMOKE=1 to skip)"
+            "$0" smoke-ling
+        fi
+        if [[ ! -f data/soup/nemotron-combined/train.jsonl ]]; then
+            echo "==> preparing 60K 4-source combined dataset (CodeX + Nemotron-CP + Nemotron-SWE + Ling)"
+            uv run python scripts/prep_nemotron_combined.py \
+                2>&1 | tee "$LOG_DIR/prep-nemotron-combined-$ts.log"
+        else
+            echo "==> reusing existing data/soup/nemotron-combined/train.jsonl"
+            wc -l data/soup/nemotron-combined/train.jsonl
+        fi
+        echo "==> Soup MLX 4-source SFT (MiniCPM5-1B-MLX, 60K subset, lr=1e-5)"
+        echo "    log: $LOG_DIR/soup-full-nemotron-$ts.log"
+        echo "    expected: ~4 hr on M3 Pro 18 GB, ~8 MB adapter"
+        SOUP_OUTPUT="artifacts/soup-nemotron-combined-60k" \
+            uv run soup train --config configs/soup-sft-nemotron-combined-60k.yaml --yes \
+            2>&1 | tee "$LOG_DIR/soup-full-nemotron-$ts.log"
+        echo
+        echo "==> 4-source SFT done; adapter at artifacts/soup-nemotron-combined-60k/adapters.safetensors"
+        echo "    next: ./train-soup.sh gen '...'    # prompt"
+        echo "          ./train-soup.sh export       # fuse + merge"
+        echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
+        ;;
     gen)
         # NOTE: `soup infer` and `soup chat` go through the transformers
         # backend, which needs PyTorch — that contradicts the MLX
@@ -175,7 +201,7 @@ case "$ACTION" in
         ;;
     *)
         echo "Unknown action: $ACTION" >&2
-        echo "Usage: $0 [smoke|smoke-ling|full|full-combined|full-lowlr|gen|export|ship]" >&2
+        echo "Usage: $0 [smoke|smoke-ling|full|full-combined|full-lowlr|full-nemotron|gen|export|ship]" >&2
         exit 2
         ;;
 esac
