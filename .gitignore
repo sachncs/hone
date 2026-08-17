@@ -59,6 +59,7 @@ data/eval/
 data/full/
 data/soup/
 artifacts/
+results/
 *.log
 .soup-crashes/
 
