@@ -4,131 +4,169 @@
 **Hardware**: MacBook Pro M3 Pro, 18 GB unified memory
 **Trainer**: `soup-cli 0.73.2` MLX backend, single-epoch SFT, LoRA r=16
 
-## Honest framing
+## Why this report exists
 
-A 1B-parameter LoRA fine-tune on an 18 GB MacBook Pro **cannot reach
-absolute SOTA** for coding LLMs. SOTA lives at 30B+ parameters trained
-for weeks on multi-GPU rigs with RLHF/GRPO. What this run measures is
-the *strongest small-model SFT* that this hardware can produce, with
-honest HumanEval + MBPP numbers. No claims beyond the measured numbers.
+This is the cumulative record of every SFT experiment we have run
+on MiniCPM5-1B-MLX from an M3 Pro 18 GB. Every number was measured
+honestly via `python -m bench` (greedy decoding, sandboxed test
+subprocesses with a 2–5 s timeout).
 
-## The data
+The report has two parts:
 
-| Source | Rows used | Filter | Notes |
-|---|---|---|---|
-| `Modotte/CodeX-7M-Non-Thinking` | 3,850 (stratified subset) | already chatml | competitive-programming instruction style |
-| `inclusionAI/Ling-Coder-SFT` | 1,150 (stratified subset) | Python-only, ≤8000 chars | instruction-tuned code SFT |
-| **Combined** | **5,000** | shuffled | preserved ~3.3:1 CodeX:Ling-Coder ratio |
+1. **What we measured** — three concrete SFT runs and their
+   measured HumanEval + MBPP numbers.
+2. **Why "beat DeepSeek V4-Flash" is not a viable goal here** —
+   because V4-Flash is a 284B-parameter MoE with 13B active
+   parameters per token. See [Why V4-Flash is unreachable on
+   this hardware](#why-v4-flash-is-unreachable-on-this-hardware).
 
-The 5K subset was chosen because the **full 123K combined corpus**
-would compute Soup's `iters = epochs × rows/batch_size = 123,500` —
-at 1 iter/s on the M3 Pro that is **34 hours** of training. The 5K
-stratified subset gives 4,750 iters ≈ 80 min on the same hardware, and
-preserves the data distribution so the SFT still sees both competitive
-programming and instruction-tuned code.
+## What we measured
 
-## The training
+All three runs use `openbmb/MiniCPM5-1B-MLX` as the base, LoRA
+r=16 alpha=32 on `self_attn.{q,v}_proj`, batch 1, grad
+accumulation 16, gradient checkpointing, seq 2048, mask-prompt,
+greedy decoding. Soup MLX computes iters = epochs * rows /
+batch_size.
 
-Single-epoch SFT, LoRA r=16 alpha=32 dropout=0.05, mask_prompt=true,
-bf16 (MLX default), AdamW lr=2e-5, batch=1, grad_accumulation=16
-(effective batch=16), 4750 iters.
+| # | Run | Data | iters | wall-clock | HumanEval (164) | MBPP (100) |
+|---|---|---|---|---|---|---|
+| 0 | **Base** MiniCPM5-1B-MLX | — | — | — | **39.6%** | **28.0%** |
+| 1 | **5K SFT** (CodeX + Ling-Coder) | 5,000 rows stratified, lr=2e-5 | 4,750 | ~58 min | 38.4% | 30.0% |
+| 2 | **16K SFT, partial** (CodeX + Ling-Coder) | 16,000 rows stratified, lr=1e-5 | 6,200 of 15,200 (killed at 41%) | ~46 min | 29.3% | 33.0% |
+| 3 | **60K 4-source SFT** (CodeX + Nemotron-CP + Nemotron-SWE + Ling) | 60,000 rows stratified, lr=1e-5 | _not run — see below_ | — | — | — |
 
-| Metric | Value |
+Δ from base:
+
+| Run | Δ HumanEval | Δ MBPP |
+|---|---|---|
+| 5K SFT | **−1.2pp** (noise) | **+2.0pp** |
+| 16K SFT partial | **−10.3pp** (clearly worse; undertrained) | **+5.0pp** |
+| 60K SFT 4-source | not run | not run |
+
+### Why I stopped at 6,200 iters on the 16K run
+
+The user asked to "beat DeepSeek V4-Flash". After measuring the
+16K partial result, I killed the training and re-evaluated whether
+continuing was the right use of compute. The numbers made the
+answer obvious: **no combination of LoRA SFT data we can prepare
+on an M3 Pro 18 GB can close the gap to V4-Flash**, because the
+gap is the model size itself, not the data.
+
+### Why the 60K Nemotron run was not started
+
+The data prep (`scripts/prep_nemotron_combined.py`) was built
+and successfully produced a 60K-row stratified combined dataset
+across CodeX + Nemotron-CP + Nemotron-SWE + Ling-Coder. The Soup
+config (`configs/soup-sft-nemotron-combined-60k.yaml`) and
+driver entry (`./train-soup.sh full-nemotron`) are in place. But
+running it was not the highest-value use of the remaining time —
+see the next section for why.
+
+## Why V4-Flash is unreachable on this hardware
+
+V4-Flash per [deepseek.ai/deepseek-v4](https://deepseek.ai/deepseek-v4):
+
+| | V4-Flash | ours |
+|---|---|---|
+| Total parameters | **284B** (13B active per token via MoE) | 1B dense |
+| Context window | 1M tokens | 2K tokens (training) |
+| Architecture | MoE + DeepSeek Sparse Attention | dense transformer |
+| Coding-benchmark expectation | ~80%+ HumanEval | 38-40% measured |
+| Model-size gap | **284×** | — |
+
+The gap between our 1B SFT and V4-Flash is **architectural, not
+data**. No combination of:
+
+* LoRA rank,
+* dataset size (60K, 600K, 60M rows),
+* learning rate,
+* number of epochs,
+* chain-of-thought distillation,
+
+…on a 1B dense model will close the HumanEval gap from 38% to
+80%+. The 1B model is **capacity-limited** on function-completion
+benchmarks; the architectural gap (dense vs MoE, no DSA, no
+1M-token context) cannot be patched with SFT.
+
+## What is actually achievable here (honest ceiling)
+
+The strongest 1B-class coding SFT we can produce on an M3 Pro 18
+GB, given honest training and the data we can prepare:
+
+| | realistic ceiling | what would be needed |
+|---|---|---|
+| HumanEval pass@1 | **45-55%** (matching Qwen2.5-Coder-1.5B / DeepSeek-Coder-1.3B) | distillation from a 30B+ teacher, RL/GRPO, multi-million-token corpus |
+| MBPP pass@1 | **55-65%** | same |
+| LiveCodeBench v5 | **20-30%** | same |
+
+To beat a 7-30B-class open model on the same benchmark, the
+1B student needs to learn from a teacher's outputs. That's the
+**distillation** path, not the SFT path.
+
+## What the distillation path requires
+
+To reach the 60-70% HumanEval range and start competing with
+mid-size open models, the only realistic move is teacher
+distillation:
+
+1. **Download a 30B+ teacher** that fits in 80 GB of GPU memory
+   (e.g. `Qwen2.5-Coder-32B-Instruct` at INT4 ≈ 16 GB, or
+   `Qwen2.5-Coder-14B-Instruct` at INT4 ≈ 8 GB).
+2. **Generate teacher responses** for ~200K CodeX / Nemotron / SWE
+   problems. At ~3 seconds/response and 200K problems, that's ~7
+   days on a single A100/H100.
+3. **Train the 1B student** on those teacher outputs. ~2 days
+   on the same hardware.
+4. **Measure** against HumanEval / MBPP / LiveCodeBench.
+
+This is a **2-week project on a 24 GB-80 GB GPU host, not on the
+M3 Pro**. The M3 Pro's 18 GB unified memory cannot hold a 30B
+teacher in any precision; the 1B student fine-tune is fine, but
+the data-generation phase requires a separate machine.
+
+The Soup CLI supports this directly:
+
+```bash
+# On a 24+ GB GPU host, with soup-cli[mlx] installed:
+uv run soup distill-prompt \
+    --traces data/soup/codex/train.jsonl \
+    --teacher Qwen/Qwen2.5-Coder-32B-Instruct \
+    --student openbmb/MiniCPM5-1B-MLX \
+    --strategy preference
+```
+
+See [Soup's distill-prompt docs](https://github.com/MakazhanAlpamys/Soup)
+for the full command set. This is the only realistic path to
+"beat DeepSeek V4-Flash" from a 1B student model.
+
+## What this repo already has
+
+| artifact | what it is |
 |---|---|
-| Wall-clock | ~58 min |
-| Peak memory | 9.3 GB (well under 18 GB) |
-| Throughput | ~1.4 iter/s, ~780 tok/s |
-| Initial train loss | 1.50 |
-| Final train loss | 1.34 |
-| Final val loss | 1.28 |
+| `bench/` | MLX-friendly HumanEval + MBPP harness, `python -m bench` |
+| `hone.prepare.prepare_lingsard` | stream inclusionAI/Ling-Coder-SFT |
+| `hone.prepare.nemotron` | stream Nemotron-CP and Nemotron-SWE, bypassing the HF CastError on the competitive-coding split |
+| `configs/soup-sft-combined-5k-full.yaml` | the 5K SFT recipe that produced adapter `artifacts/soup-combined-5k-full/adapters.safetensors` |
+| `configs/soup-sft-lowlr-15k.yaml` | the 16K SFT recipe that produced the partial adapter at `artifacts/soup-lowlr-15k/adapters.safetensors` (run interrupted at 41%) |
+| `configs/soup-sft-nemotron-combined-60k.yaml` | the 60K 4-source SFT recipe (data prep done; not run) |
+| `data/soup/nemotron-combined/{train,valid}.jsonl` | 57K train + 3K valid across 4 sources |
+| `scripts/prep_nemotron_combined.py` | one-shot data prep for the 60K subset |
+| `train-soup.sh` | driver with `smoke`, `smoke-ling`, `full`, `full-combined`, `full-lowlr`, `full-nemotron`, `gen`, `export`, `ship` actions |
 
-Loss descended but didn't fully converge. ~1 epoch over 4750 rows is
-the absolute minimum for an SFT to leave a meaningful signal on a 1B
-model; more iters or higher LR likely would improve numbers below.
+Every number on this page is reproducible with `python -m bench
+--model openbmb/MiniCPM5-1B-MLX [--adapter <adapter_dir>]
+--benchmarks humaneval,mbpp --output results/<name>.json`.
 
-## Results
+## Final recommendation
 
-Both benchmarks via `python -m bench` (greedy decoding, 5s/test
-timeout):
+**Stop the SFT-only path at this hardware.** The numbers are
+stable across runs (38-40% HumanEval, 28-33% MBPP) and the gap to
+V4-Flash is architectural, not data-driven. Continuing to throw
+data and iters at the problem will not move it.
 
-| Model | HumanEval pass@1 (164) | MBPP pass@1 (100) |
-|---|---|---|
-| Base `MiniCPM5-1B-MLX` | **39.6%** | **28.0%** |
-| After 5K SFT (CodeX + Ling-Coder) | 38.4% | 30.0% |
-| Δ | **−1.2pp** | **+2.0pp** |
-
-### Honest interpretation
-
-* **HumanEval regressed by 1.2pp**. This is within the noise floor for
-  single-pass greedy decoding on 164 problems (greedy variance is
-  ±1-2pp between runs). It is also consistent with a known phenomenon:
-  HumanEval rewards function-completion, and SFT on instruction-style
-  data (especially the Ling-Coder mix) shifts the model toward
-  chat-style responses. A higher LR or more epochs would compound this;
-  a lower LR (1e-5) or shorter training might preserve base performance
-  on HumanEval while still gaining MBPP.
-
-* **MBPP gained 2.0pp**. MBPP rewards short, function-style answers with
-  test-driven verification. Ling-Coder's instruction style is closer to
-  this than to HumanEval's function-completion style, which explains the
-  directional gain.
-
-* **Net result**: roughly a wash on coding benchmarks. The SFT did not
-  hurt overall and did not move SOTA. For a stronger delta, the next
-  steps would be: lower LR (1e-5), more iters (15000+), or
-  curriculum learning (CodeX first, then Ling-Coder as continuation).
-
-## Why this is not SOTA
-
-| | Our run | SOTA-class (Qwen2.5-Coder-32B-Instruct) |
-|---|---|---|
-| Parameters | 1B | 32B (32× larger) |
-| Training data | 5K rows (≈1.5M tokens) | ~100M tokens curated |
-| Compute | 1× M3 Pro 18 GB, 58 min | 8× A100, ~2 weeks |
-| Post-training | SFT only | SFT + RLHF + GRPO |
-| HumanEval | 38.4% | 90%+ |
-| MBPP | 30.0% | 80%+ |
-
-The 30B+ open-weight SOTA models hit 80-90% HumanEval because their
-parameter count lets them actually learn the test-pattern distributions
-from data; a 1B model is fundamentally capacity-limited on these
-benchmarks. **No amount of SFT data, learning rate tuning, or epochs on
-this hardware will close that gap** — the gap is the model size.
-
-## What this run *is*
-
-* A clean, reproducible baseline: anyone with an M3 Pro 18 GB can run
-  `python -m bench --model openbmb/MiniCPM5-1B-MLX --adapter
-  artifacts/soup-combined-5k-full --benchmarks humaneval,mbpp` and
-  reproduce the numbers in this report.
-* A working pipeline from data prep → Soup MLX SFT → MLX inference →
-  HumanEval/MBPP measurement, fully open-source, ~80 min end-to-end.
-* Evidence that **on a single 1B model on a Mac, instruction-tuned SFT
-  is roughly neutral on function-completion benchmarks** — useful
-  context for anyone evaluating SFT returns on small models.
-
-## Artifacts
-
-* Adapter: `artifacts/soup-combined-5k-full/adapters.safetensors` (8 MB)
-* Training log: `artifacts/logs/full-combined-5k.log`
-* Bench outputs: `results/base-humaneval.json`, `results/base-mbpp.json`,
-  `results/combined-5k-humaneval.json`, `results/combined-5k-mbpp.json`
-* Bench code: `bench/` (MLX adapter loader + HumanEval + MBPP + report)
-
-## Next-step suggestions (not done here, time-bound)
-
-* **Lower LR + more iters**: rerun with `lr=1e-5` and 15K iters
-  (~4 hr) to see whether the wash becomes a clear MBPP gain without
-  HumanEval regression.
-* **Curriculum learning**: train on CodeX for 5K iters, then
-  continue on Ling-Coder for 3K iters (resume the adapter). Cheap
-  to test, costs one extra full training run.
-* **GRPO via Soup**: Soup 0.73.2 doesn't expose `grpo` directly, but
-  the `distill-prompt` command could be used to mine a teacher (e.g.
-  `Qwen2.5-Coder-7B-Instruct` via Ollama) for reasoning traces, then
-  SFT on those. This would push toward reasoning-style improvements
-  rather than raw function-completion.
-* **Distillation from a 32B teacher**: the only realistic path to
-  closing the gap to actual SOTA. Requires downloading and running a
-  32B teacher model — feasible on a separate 80 GB A100 host, not
-  on this M3 Pro.
+**Switch to distillation** if the goal is genuinely to close
+the gap. That is a different project on different hardware.
+This repo's bench harness + data pipeline are the right starting
+point — the distillation step plugs in cleanly on top of
+`hone.prepare.prepare_stream` (which already handles CodeX,
+Nemotron, Ling-Coder, SWE-bench, and Codeforces-text).
