@@ -6,7 +6,8 @@
 #   ./train-soup.sh smoke                 # 32 iters, ~30s, validates CodeX path
 #   ./train-soup.sh smoke-ling            # 50 iters on Ling-Coder (different dist)
 #   ./train-soup.sh full                  # full CodeX run, ~70 min on M3 Pro 18 GB
-#   ./train-soup.sh full-combined         # full CodeX+Ling-Coder, ~100 min
+#   ./train-soup.sh full-combined         # full CodeX+Ling-Coder, ~80 min (5K subset)
+#   ./train-soup.sh full-lowlr            # full CodeX+Ling-Coder, ~3 hr (16K subset, lr=1e-5)
 #   ./train-soup.sh gen "prompt"          # single-prompt generation via mlx_lm
 #   ./train-soup.sh export                # fuse LoRA into base for deployment
 #   ./train-soup.sh ship                  # `soup ship` regression gate (needs PyTorch)
@@ -93,6 +94,24 @@ case "$ACTION" in
         echo "          ./train-soup.sh export       # fuse + merge"
         echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
         ;;
+    full-lowlr)
+        if [[ "${SOUP_SKIP_SMOKE:-0}" != "1" ]]; then
+            echo "==> running smoke validation first (set SOUP_SKIP_SMOKE=1 to skip)"
+            "$0" smoke-ling
+        fi
+        echo "==> Soup MLX lower-LR SFT (MiniCPM5-1B-MLX on CodeX + Ling-Coder, lr=1e-5, 16k subset)"
+        echo "    log: $LOG_DIR/soup-full-lowlr-$ts.log"
+        echo "    expected: ~3 hr on M3 Pro 18 GB, ~8 MB adapter"
+        echo "    config: configs/soup-sft-lowlr-15k.yaml"
+        SOUP_OUTPUT="artifacts/soup-lowlr-15k" \
+            uv run soup train --config configs/soup-sft-lowlr-15k.yaml --yes \
+            2>&1 | tee "$LOG_DIR/soup-full-lowlr-$ts.log"
+        echo
+        echo "==> lowlr SFT done; adapter at artifacts/soup-lowlr-15k/adapters.safetensors"
+        echo "    next: ./train-soup.sh gen '...'    # prompt"
+        echo "          ./train-soup.sh export       # fuse + merge"
+        echo "          ./train-soup.sh ship         # regression gate (needs PyTorch)"
+        ;;
     gen)
         # NOTE: `soup infer` and `soup chat` go through the transformers
         # backend, which needs PyTorch — that contradicts the MLX
@@ -156,7 +175,7 @@ case "$ACTION" in
         ;;
     *)
         echo "Unknown action: $ACTION" >&2
-        echo "Usage: $0 [smoke|smoke-ling|full|full-combined|gen|export|ship]" >&2
+        echo "Usage: $0 [smoke|smoke-ling|full|full-combined|full-lowlr|gen|export|ship]" >&2
         exit 2
         ;;
 esac
