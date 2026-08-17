@@ -144,3 +144,63 @@ def test_role_enum_values() -> None:
 def test_prepare_error_is_base_of_data_error() -> None:
     """All prepare-layer errors share a single catchable base."""
     assert issubclass(DataError, PrepareError)
+
+
+# ---------------------------------------------------------------------------
+# Nemotron row normalizer
+# ---------------------------------------------------------------------------
+
+
+def test_nemotron_normalizer_strips_reasoning_content() -> None:
+    """The reasoning trace should not leak into the chat template."""
+    from hone.prepare.nemotron import _maybe_drop_truncated
+
+    row = {
+        "messages": [
+            {"role": "user", "content": "Q"},
+            {
+                "role": "assistant",
+                "content": "```python\nprint()\n```",
+                "reasoning_content": "I should use print.",
+            },
+        ]
+    }
+    cleaned = _maybe_drop_truncated(row)
+    assert cleaned is not None
+    assert cleaned == {
+        "messages": [
+            {"role": "user", "content": "Q"},
+            {"role": "assistant", "content": "```python\nprint()\n```"},
+        ]
+    }
+
+
+def test_nemotron_normalizer_rejects_empty_messages() -> None:
+    from hone.prepare.nemotron import _maybe_drop_truncated
+
+    assert _maybe_drop_truncated({"messages": []}) is None
+    assert (
+        _maybe_drop_truncated({"messages": [{"role": "user", "content": "  "}]}) is None
+    )
+    assert _maybe_drop_truncated({"messages": "not a list"}) is None
+
+
+def test_nemotron_normalizer_rejects_missing_role() -> None:
+    from hone.prepare.nemotron import _maybe_drop_truncated
+
+    assert (
+        _maybe_drop_truncated(
+            {"messages": [{"content": "x"}, {"role": "assistant", "content": "y"}]}
+        )
+        is None
+    )
+
+
+def test_nemotron_config_is_frozen() -> None:
+    """Configs must be immutable so the same name doesn't drift across calls."""
+    import dataclasses
+
+    from hone.prepare.nemotron import NEMOTRON_COMPETITIVE_PROGRAMMING
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        NEMOTRON_COMPETITIVE_PROGRAMMING.name = "something-else"  # type: ignore[misc]
