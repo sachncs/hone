@@ -1,0 +1,67 @@
+# Soup config — full MiniCPM5-1B-MLX SFT on CodeX for the SOTA push
+#
+# This is the REAL training run. ~6000 iters over the full 95k combined
+# CodeX dataset (~1 epoch at batch 1, grad accumulation 16 → effective
+# batch 16).
+#
+# Prereqs:
+#   uv pip install "soup-cli[mlx]"
+#   ./train.sh --smoke-only   # OR run configs/soup-sft-codex-smoke.yaml
+#
+# Run from the hone repo root:
+#   uv run soup train --config configs/soup-sft-codex-full.yaml --yes
+#
+# Memory budget on M3 Pro 18 GB (measured by the smoke run):
+#   base bf16 ~1.2 GB resident
+#   LoRA r=16 adapters + grads + AdamW state ~50 MB
+#   activations + KV at seq 2048, batch 1, grad-checkpoint: ~7 GB
+#   total peak: ~8.9 GB  → comfortable headroom in 18 GB unified memory
+#
+# Time budget on M3 Pro:
+#   6000 iters × ~0.65s/iter ≈ 65 min per epoch
+#   With val eval every ~1500 iters (~7s each), expect ~70 min total.
+#
+# Why this combination is the right SOTA push on Apple Silicon:
+#   * openbmb/MiniCPM5-1B is already a strong instruction-tuned base;
+#     MiniCPM5-1B-MLX is the same weights in MLX-native format (faster
+#     cold start, no FP16->MLX conversion).
+#   * Modotte/CodeX-7M-Non-Thinking is 7M competitive-programming
+#     instruction rows; 95k are already prepared under data/full/codex/.
+#   * LoRA r=16 on q/v is what hone's existing configs already use —
+#     switching to Soup gets us Soup's data validation, format detection,
+#     experiment tracking, and `soup ship` regression gate for free.
+#
+# Expected outcome: ~8 MB adapter at artifacts/soup-codex-full/
+# that beats the base model on LiveCodeBench-style coding tasks.
+# Honest expectation: this is a *strong small-model SFT*, not a
+# leaderboard-topping model. See docs/SOTA-EXPECTATIONS.md for why.
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/codex/train.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  lr: 2.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 50
+  save_steps: 1000
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-codex-full

@@ -1,0 +1,38 @@
+# Dependabot configuration for hone.
+#
+# Tracks: GitHub Actions versions, uv pip dependencies (via pip).
+# The repository is a library, so weekly checks are appropriate.
+
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    # Ignore major version bumps for runtime deps; libraries should
+    # adopt new majors explicitly so the lockfile stays in sync.
+    ignore:
+      - dependency-name: "typer"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pyyaml"
+        update-types: ["version-update:semver-major"]

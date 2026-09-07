@@ -1,0 +1,67 @@
+# Soup config — fine-tune MiniCPM5-1B-MLX on CodeX via Apple Silicon (MLX backend)
+#
+# This is the SMOKE config. It runs ~40 iters over a 40-row slice so the
+# pipeline can be validated end-to-end on the M3 Pro 18 GB before
+# committing to a multi-day run on the full 95k combined dataset.
+#
+# Prereqs (run once):
+#   uv pip install "soup-cli[mlx]"
+#
+# Run from the hone repo root:
+#   uv run soup train --config configs/soup-sft-codex-smoke.yaml --yes
+#
+# Note on iters: Soup's MLX backend recomputes the iteration count as
+# `epochs * ceil(len(train_rows) / batch_size)` — it ignores the
+# `iters` field at the schema level (see src/soup_cli/trainer/mlx_sft.py).
+# To control step count, size the train file instead of overriding iters.
+# With `epochs: 1` and 40 train rows at batch 1, we get exactly 40 iters.
+#
+# Notes vs. the Soup `code` template:
+#   * base switched to openbmb/MiniCPM5-1B-MLX — pre-converted MLX weights
+#     so Soup skips the on-the-fly FP16->MLX conversion. ~600 MB.
+#   * backend: mlx (the MLX stack supports sft/dpo/grpo only).
+#   * quantization omitted — Soup's MLX path treats quantization as
+#     advisory (MLX models are pre-quantized at build time; see
+#     src/soup_cli/utils/mlx.py::load_mlx_model).
+#   * lora target_modules set explicitly because Soup's MLX fallback
+#     for `auto` is the same two modules hone uses.
+#   * max_length 2048 — CodeX rows are short (median ~1.7 KB chars,
+#     ~450 tokens).
+#   * batch_size 1 + grad_accumulation_steps 16 = effective batch 16.
+#   * lr 1e-5 — small LoRA (r=16) on a 1B base, conservative start.
+#   * val_split 0.2 → 8 of the 40 smoke rows held out as val.
+#
+# Expected outcome: an adapter under artifacts/soup-codex-smoke/
+# (adapters.safetensors + adapter_config.json). Finite train loss,
+# stable val loss. NaN or 0.000 = pipeline broken, do not run the
+# long-run config.
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/codex/smoke-train-small.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.2
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  lr: 1.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 5
+  save_steps: 20
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-codex-smoke

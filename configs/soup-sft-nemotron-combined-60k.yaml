@@ -1,0 +1,53 @@
+# Soup config — 4-source combined SFT (CodeX + Nemotron-CP + Nemotron-SWE + Ling)
+#
+# Why this exists:
+#   docs/ABLATION-REPORT.md listed 'curriculum learning' as a
+#   follow-up, but Soup MLX doesn't support --resume. Instead, the
+#   user pivoted to broadening the data distribution: add the two
+#   NVIDIA Nemotron SFT corpora (competitive-programming-v2 + SWE-v2)
+#   alongside CodeX + Ling-Coder. The hope is that Nemotron's
+#   chain-of-thought traces (Nemotron-CP) and SWE-style multi-turn
+#   reasoning (Nemotron-SWE) improve MBPP / function-completion
+#   performance more than the previous 5K subset.
+#
+# Recipe:
+#   * lr=1e-5 (same as the lowlr-15k baseline that this builds on).
+#   * 60000 stratified rows (25K CodeX + 15K Nemotron-CP +
+#     15K Nemotron-SWE + 5K Ling-Coder) so Soup's
+#     iters = epochs * rows / batch_size = 57000 (~4 hr on M3 Pro).
+#   * Run data prep first:
+#       uv run python scripts/prep_nemotron_combined.py
+#
+# IMPORTANT: Soup MLX computes iters = epochs * rows/batch_size,
+# IGNORING the explicit `iters` field. The 60000-row data file
+# produces 57000 Soup iters for ~4 hours of training.
+
+base: openbmb/MiniCPM5-1B-MLX
+backend: mlx
+task: sft
+
+data:
+  train: data/soup/nemotron-combined/train.jsonl
+  format: chatml
+  max_length: 2048
+  val_split: 0.05
+  train_on_responses_only: true
+
+training:
+  epochs: 1
+  lr: 1.0e-5
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  seed: 1234
+  logging_steps: 100
+  save_steps: 2000
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - self_attn.q_proj
+      - self_attn.v_proj
+
+output: artifacts/soup-nemotron-combined-60k
