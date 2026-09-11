@@ -181,3 +181,75 @@ def test_mbpp_loader_returns_problems() -> None:
     assert isinstance(problems[0], MBPPProblem)
     assert problems[0].text
     assert len(problems[0].test_list) >= 3
+
+
+# ---------------------------------------------------------------------------
+# MlxCoder smoke (mocked mlx_lm)
+# ---------------------------------------------------------------------------
+
+
+def test_mlx_coder_generate_returns_n_samples_per_prompt() -> None:
+    """MlxCoder.generate is exercised against a mock mlx_lm.
+
+    The harness is the only caller of mlx_lm.generate; a regression
+    in the upstream API (e.g. the sampler= kwarg rename that has
+    happened in past releases) would only surface when someone
+    runs the harness on a Mac. This mock keeps the regression
+    gate inside CI.
+    """
+    from bench.model import GenerationParams, MlxCoder
+
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+    class _FakeTokenizer:
+        def __call__(self, *args: object, **kwargs: object) -> object:
+            return None
+
+    def _fake_load(
+        model_id: str, adapter_path: str | None = None
+    ) -> tuple[_FakeModel, _FakeTokenizer]:
+        return (_FakeModel(), _FakeTokenizer())
+
+    def _fake_generate(
+        model: _FakeModel,
+        tokenizer: _FakeTokenizer,
+        *,
+        prompt: str,
+        max_tokens: int,
+        sampler: object,
+        verbose: bool = False,
+    ) -> str:
+        model.calls += 1
+        return f"{prompt}->out{model.calls}"
+
+    def _fake_make_sampler(*, temp: float) -> object:
+        return ("sampler", temp)
+
+    import sys
+
+    fake_module = type(sys)("mlx_lm")
+    fake_module.load = _fake_load  # type: ignore[attr-defined]
+    fake_module.generate = _fake_generate  # type: ignore[attr-defined]
+    sampler_module = type(sys)("mlx_lm.sample_utils")
+    sampler_module.make_sampler = _fake_make_sampler  # type: ignore[attr-defined]
+    fake_module.sample_utils = sampler_module  # type: ignore[attr-defined]
+
+    monkey = __import__("pytest").MonkeyPatch()
+    try:
+        monkey.setitem(sys.modules, "mlx_lm", fake_module)
+        monkey.setitem(sys.modules, "mlx_lm.sample_utils", sampler_module)
+        coder = MlxCoder(model_id="fake/model", adapter_path=None)
+        completions = coder.generate(
+            ["p1", "p2"],
+            GenerationParams(max_tokens=8, temperature=0.0, n_samples=3),
+        )
+    finally:
+        monkey.undo()
+
+    assert len(completions) == 2
+    for prompt, samples in zip(["p1", "p2"], completions, strict=True):
+        assert len(samples) == 3
+        for sample in samples:
+            assert sample.startswith(prompt + "->out")
