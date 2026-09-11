@@ -153,7 +153,7 @@ def test_prepare_error_is_base_of_data_error() -> None:
 
 def test_nemotron_normalizer_strips_reasoning_content() -> None:
     """The reasoning trace should not leak into the chat template."""
-    from hone.prepare.nemotron import _maybe_drop_truncated
+    from hone.prepare.nemotron import _validate_messages
 
     row = {
         "messages": [
@@ -165,7 +165,7 @@ def test_nemotron_normalizer_strips_reasoning_content() -> None:
             },
         ]
     }
-    cleaned = _maybe_drop_truncated(row)
+    cleaned = _validate_messages(row)
     assert cleaned is not None
     assert cleaned == {
         "messages": [
@@ -176,20 +176,20 @@ def test_nemotron_normalizer_strips_reasoning_content() -> None:
 
 
 def test_nemotron_normalizer_rejects_empty_messages() -> None:
-    from hone.prepare.nemotron import _maybe_drop_truncated
+    from hone.prepare.nemotron import _validate_messages
 
-    assert _maybe_drop_truncated({"messages": []}) is None
+    assert _validate_messages({"messages": []}) is None
     assert (
-        _maybe_drop_truncated({"messages": [{"role": "user", "content": "  "}]}) is None
+        _validate_messages({"messages": [{"role": "user", "content": "  "}]}) is None
     )
-    assert _maybe_drop_truncated({"messages": "not a list"}) is None
+    assert _validate_messages({"messages": "not a list"}) is None
 
 
 def test_nemotron_normalizer_rejects_missing_role() -> None:
-    from hone.prepare.nemotron import _maybe_drop_truncated
+    from hone.prepare.nemotron import _validate_messages
 
     assert (
-        _maybe_drop_truncated(
+        _validate_messages(
             {"messages": [{"content": "x"}, {"role": "assistant", "content": "y"}]}
         )
         is None
