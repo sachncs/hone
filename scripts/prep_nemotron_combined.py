@@ -35,7 +35,7 @@ from hone.prepare import (
     NEMOTRON_COMPETITIVE_PROGRAMMING,
     NEMOTRON_SWE,
     NemotronConfig,
-    prepare_lingsard,
+    prepare_ling_coder,
 )
 from hone.prepare import PrepareRequest, prepare_local_file, prepare_stream
 
