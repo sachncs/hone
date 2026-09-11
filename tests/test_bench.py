@@ -93,6 +93,52 @@ def test_extract_python_block_falls_back_to_raw() -> None:
 
 
 # ---------------------------------------------------------------------------
+# BenchmarkReport JSON shape
+# ---------------------------------------------------------------------------
+
+
+def test_report_distinguishes_unselected_from_pass_at_10_not_run() -> None:
+    """A not-selected benchmark serialises as None; a selected benchmark
+    that did not run pass@10 still carries pass_at_10_run=False.
+    """
+    from bench.humaneval import HumanEvalRun
+    from bench.report import build_report
+
+    selected_no_pass10 = HumanEvalRun(
+        pass_at_1=0.25,
+        pass_at_10=None,
+        pass_at_10_run=False,
+        total=10,
+        seconds=12.0,
+    )
+    selected_pass10 = HumanEvalRun(
+        pass_at_1=0.25,
+        pass_at_10=0.42,
+        pass_at_10_run=True,
+        total=10,
+        seconds=120.0,
+    )
+
+    no_humaneval = build_report(
+        model_id="m", adapter=None, humaneval=None, mbpp=None
+    ).to_json()
+    assert no_humaneval["humaneval"] is None
+    assert no_humaneval["mbpp"] is None
+
+    humaneval_only = build_report(
+        model_id="m", adapter=None, humaneval=selected_no_pass10, mbpp=None
+    ).to_json()
+    assert humaneval_only["humaneval"]["pass_at_10"] is None
+    assert humaneval_only["humaneval"]["pass_at_10_run"] is False
+
+    with_pass10 = build_report(
+        model_id="m", adapter=None, humaneval=selected_pass10, mbpp=None
+    ).to_json()
+    assert with_pass10["humaneval"]["pass_at_10_run"] is True
+    assert with_pass10["humaneval"]["pass_at_10"] == 0.42
+
+
+# ---------------------------------------------------------------------------
 # loader smoke tests
 # ---------------------------------------------------------------------------
 

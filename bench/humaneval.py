@@ -50,6 +50,8 @@ class HumanEvalRun:
 
     pass_at_1: float
     pass_at_10: float | None
+    pass_at_10_run: bool
+    """True iff pass@10 was actually computed (not just left as None)."""
     total: int
     seconds: float
 
@@ -157,6 +159,7 @@ def run_humaneval(
     return HumanEvalRun(
         pass_at_1=pass_at_1,
         pass_at_10=pass_at_10_score,
+        pass_at_10_run=pass_at_10,
         total=len(outcomes),
         seconds=elapsed,
     )
