@@ -21,7 +21,7 @@ TIMEOUT_SECONDS: float = 5.0
 
 
 @dataclass(frozen=True)
-class TestOutcome:  # noqa: PLW0118 - intentional public type, not a pytest class
+class TestOutcome:
     """Result of running one candidate against one test case list."""
 
     passed: bool
@@ -87,4 +87,4 @@ def aggregate(outcomes: list[TestOutcome]) -> dict[str, int | float]:
     }
 
 
-__all__ = ["TestOutcome", "TIMEOUT_SECONDS", "aggregate", "evaluate"]
+__all__ = ["TIMEOUT_SECONDS", "TestOutcome", "aggregate", "evaluate"]

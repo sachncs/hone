@@ -7,7 +7,7 @@ Usage:
     python -m bench --model openbmb/MiniCPM5-1B-MLX --pass-at-10 --output results/base.json
 
 Reports go to stdout (markdown) and optionally to a JSON file.
-"""
+"""  # noqa: E501
 
 from __future__ import annotations
 

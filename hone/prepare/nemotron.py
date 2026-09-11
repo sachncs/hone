@@ -149,9 +149,7 @@ def stream_nemotron(
             if not isinstance(messages_obj, list):
                 continue
             total_chars = sum(
-                len(str(m["content"]))
-                for m in messages_obj
-                if isinstance(m, dict)
+                len(str(m["content"])) for m in messages_obj if isinstance(m, dict)
             )
             if total_chars > config.max_chars:
                 continue

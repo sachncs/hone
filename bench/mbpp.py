@@ -49,9 +49,7 @@ def load_problems() -> list[MBPPProblem]:
     """Load the MBPP 'full' split (500 problems)."""
     from datasets import load_dataset
 
-    dataset = load_dataset(
-        "google-research-datasets/mbpp", name="full", split="test"
-    )
+    dataset = load_dataset("google-research-datasets/mbpp", name="full", split="test")
     return [
         MBPPProblem(
             task_id=row["task_id"],
@@ -67,9 +65,7 @@ def _load_fewshot() -> list[MBPPProblem]:
     """Load 3 worked examples from the prompt split for few-shot prompting."""
     from datasets import load_dataset
 
-    dataset = load_dataset(
-        "google-research-datasets/mbpp", name="full", split="prompt"
-    )
+    dataset = load_dataset("google-research-datasets/mbpp", name="full", split="prompt")
     return [
         MBPPProblem(
             task_id=row["task_id"],
@@ -103,16 +99,15 @@ def _format_prompt(problem: MBPPProblem, fewshot: Sequence[MBPPProblem]) -> str:
     ``[BEGIN]`` and ``[DONE]``.
     """
     tests = problem.test_list[:3]
-    head = "You are an expert Python programmer. Solve each task by writing a Python function that passes the tests.\n\n"
+    head = (
+        "You are an expert Python programmer. "
+        "Solve each task by writing a Python function that passes the tests.\n\n"
+    )
     fewshot_block = "".join(_format_fewshot(p) for p in fewshot)
     return (
-        head
-        + fewshot_block
-        + "\nNew task:\n"
+        head + fewshot_block + "\nNew task:\n"
         f"Task: {problem.text}\n"
-        "Your code should pass these tests:\n\n"
-        + "\n".join(tests)
-        + "\n[BEGIN]\n"
+        "Your code should pass these tests:\n\n" + "\n".join(tests) + "\n[BEGIN]\n"
     )
 
 
@@ -181,7 +176,7 @@ def run_mbpp(
     )
 
     outcomes: list[TestOutcome] = []
-    for problem, completion_set in zip(problems, completions):
+    for problem, completion_set in zip(problems, completions, strict=True):
         candidate = _extract_python_block(completion_set[0])
         test_block = "\n".join(problem.test_list)
         outcome = evaluate(candidate, test_block, timeout=timeout)
