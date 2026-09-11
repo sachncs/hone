@@ -10,7 +10,7 @@ Public surface:
 * :func:`prepare_swe` — build SWE-bench SFT rows.
 * :func:`prepare_stream` — materialize every row of an HF config
   with optional token-length filtering.
-* :func:`prepare_lingsard` — stream inclusionAI/Ling-Coder-SFT.
+* :func:`prepare_ling_coder` — stream inclusionAI/Ling-Coder-SFT.
 * :func:`prepare_nemotron` — stream the two Nemotron SFT corpora
   (Competitive-Programming-v2 + SWE-v2) bypassing the HF
   ``CastError`` that blocks ``datasets.load_dataset`` on those
@@ -42,7 +42,7 @@ from hone.prepare.service import (
     Role,
     ValidationError,
     prepare_eval_prompts,
-    prepare_lingsard,
+    prepare_ling_coder,
     prepare_local_file,
     prepare_reservoir_sample,
     prepare_stream,
@@ -60,7 +60,7 @@ __all__ = [
     "Role",
     "ValidationError",
     "prepare_eval_prompts",
-    "prepare_lingsard",
+    "prepare_ling_coder",
     "prepare_local_file",
     "prepare_nemotron",
     "prepare_reservoir_sample",

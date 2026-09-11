@@ -144,7 +144,7 @@ for the full command set. This is the only realistic path to
 | artifact | what it is |
 |---|---|
 | `bench/` | MLX-friendly HumanEval + MBPP harness, `python -m bench` |
-| `hone.prepare.prepare_lingsard` | stream inclusionAI/Ling-Coder-SFT |
+| `hone.prepare.prepare_ling_coder` | stream inclusionAI/Ling-Coder-SFT |
 | `hone.prepare.nemotron` | stream Nemotron-CP and Nemotron-SWE, bypassing the HF CastError on the competitive-coding split |
 | `configs/soup-sft-combined-5k-full.yaml` | the 5K SFT recipe that produced adapter `artifacts/soup-combined-5k-full/adapters.safetensors` |
 | `configs/soup-sft-lowlr-15k.yaml` | the 16K SFT recipe that produced the partial adapter at `artifacts/soup-lowlr-15k/adapters.safetensors` (run interrupted at 41%) |

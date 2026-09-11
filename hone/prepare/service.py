@@ -511,11 +511,11 @@ def _iter_configs(configs: Iterable[str] | str) -> Iterator[str]:
 
 
 # ---------------------------------------------------------------------------
-# prepare_lingsard
+# prepare_ling_coder
 # ---------------------------------------------------------------------------
 
 
-def prepare_lingsard(
+def prepare_ling_coder(
     *,
     request: PrepareRequest,
     dataset: str = "inclusionAI/Ling-Coder-SFT",
@@ -641,7 +641,7 @@ __all__ = [
     "Role",
     "ValidationError",
     "prepare_eval_prompts",
-    "prepare_lingsard",
+    "prepare_ling_coder",
     "prepare_local_file",
     "prepare_reservoir_sample",
     "prepare_stream",

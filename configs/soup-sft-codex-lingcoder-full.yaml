@@ -6,7 +6,7 @@
 #
 # Prereqs:
 #   uv pip install "soup-cli[mlx]==0.73.2" "transformers>=4.57,<5" "huggingface-hub<1.0,>=0.34"
-#   python -c "from hone.prepare import prepare_lingsard, prepare_reservoir_sample, PrepareRequest; ..."
+#   python -c "from hone.prepare import prepare_ling_coder, prepare_reservoir_sample, PrepareRequest; ..."
 #   # or use ./train-soup.sh full-combined
 #
 # Run from the hone repo root:
