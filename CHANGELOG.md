@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `click` removed from runtime + dev dependencies. `[soup]` is the
   new optional extra; `[mlx]` and `[cuda]` removed.
 - `setup.sh` simplified: installs `hone[dev,soup]`, runs the new
-  8-test `tests/test_prepare.py` suite, runs `train-soup.sh smoke`
+  12-test `tests/test_prepare.py` suite, runs `train-soup.sh smoke`
   when `data/full/codex/train.jsonl` exists.
 
 ### Removed
@@ -47,14 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `train.sh`.
 - `tests/{unit,integration,mlx,property}/` — 218 tests covering
   the deleted MLX pipeline. Replaced by `tests/test_prepare.py`
-  (8 tests) covering the prepare layer's actual behavior.
+  (12 tests) covering the prepare layer's actual behavior.
 
 ### Added
 
-- `tests/test_prepare.py` — 8 end-to-end tests for the prepare
+- `tests/test_prepare.py` — 12 end-to-end tests for the prepare
   service: local file split, prompt/completion acceptance, ratio
   validation, malformed-JSON rejection, empty-row detection,
-  exception hierarchy, and the chat role enum.
+  exception hierarchy, chat role enum, and the Nemotron row
+  normalizer.
 - [`docs/ARCHIVE.md`](docs/ARCHIVE.md) — reference for the
   frozen MLX driver; lists every archived module, its purpose,
   and how to revive it on a development branch.
