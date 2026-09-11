@@ -4,6 +4,9 @@ All notable changes to **hone** are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+Every released heading is backed by a matching Git tag and a
+GitHub Release; see `Releases` for the binary + notes.
+
 ## [0.3.0] - 2026-08-17
 
 ### Changed
