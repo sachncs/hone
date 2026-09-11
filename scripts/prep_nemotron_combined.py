@@ -10,6 +10,12 @@ Pulls subsets of:
 Writes a shuffled train.jsonl + valid.jsonl (5% split) under
 data/soup/nemotron-combined/.
 
+The CodeX + Ling-Coder inputs are regenerated from HuggingFace
+inside this script (via :func:`prepare_stream` and
+:func:`prepare_ling_coder`) so the script is self-contained and
+runs on a fresh clone without depending on previously-prepared
+local files.
+
 Usage:
     uv run python scripts/prep_nemotron_combined.py
 
@@ -35,9 +41,10 @@ from hone.prepare import (
     NEMOTRON_COMPETITIVE_PROGRAMMING,
     NEMOTRON_SWE,
     NemotronConfig,
+    PrepareRequest,
     prepare_ling_coder,
+    prepare_stream,
 )
-from hone.prepare import PrepareRequest, prepare_local_file, prepare_stream
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -56,22 +63,43 @@ CAPS: dict[str, int] = {
 def _stratified_subsets() -> dict[str, list[dict]]:
     """Build per-source subsets.
 
-    CodeX and Ling-Coder are read from the already-prepared
-    local files (faster than re-streaming HF). The two Nemotron
-    configs stream from HF because their jsonl files are too
-    large to keep on disk.
+    CodeX and Ling-Coder are streamed from HuggingFace into a
+    short-lived working directory and then read back as JSONL;
+    the two Nemotron configs stream directly via
+    :func:`stream_nemotron`. The whole pipeline is self-contained
+    so the script runs on a fresh clone without depending on
+    previously-prepared local files.
     """
     subsets: dict[str, list[dict]] = {}
     rng = random.Random(42)
 
-    # CodeX: cap rows from the existing 95K file.
-    codex_rows = DATA_DIR.joinpath("codex", "train.jsonl").read_text().strip().split("\n")
+    # CodeX: stream from HF into a working directory and read back.
+    codex_dir = DATA_DIR / "codex"
+    if not (codex_dir / "train.jsonl").exists() or not (codex_dir / "valid.jsonl").exists():
+        codex_dir.mkdir(parents=True, exist_ok=True)
+        logging.info("codex: regenerating from Modotte/CodeX-7M-Non-Thinking")
+        prepare_stream(
+            request=PrepareRequest(output=codex_dir, seed=42),
+            repo="Modotte/CodeX-7M-Non-Thinking",
+            configs="default",
+            mode="sft",
+            max_samples=CAPS["codex"] * 2,
+        )
+    codex_rows = (codex_dir / "all.jsonl").read_text(encoding="utf-8").strip().split("\n")
     rng.shuffle(codex_rows)
     subsets["codex"] = [json.loads(line) for line in codex_rows[: CAPS["codex"]]]
     logging.info("codex: kept %d rows", len(subsets["codex"]))
 
-    # Ling-Coder: cap rows from the existing 28.5K file.
-    ling_rows = DATA_DIR.joinpath("lingcoder", "train.jsonl").read_text().strip().split("\n")
+    # Ling-Coder: regenerate from HF if the cached file is missing.
+    ling_dir = DATA_DIR / "lingcoder"
+    if not (ling_dir / "train.jsonl").exists() or not (ling_dir / "valid.jsonl").exists():
+        ling_dir.mkdir(parents=True, exist_ok=True)
+        logging.info("lingcoder: regenerating from inclusionAI/Ling-Coder-SFT")
+        prepare_ling_coder(
+            request=PrepareRequest(output=ling_dir, seed=42),
+            max_samples=CAPS["lingcoder"] * 2,
+        )
+    ling_rows = (ling_dir / "train.jsonl").read_text(encoding="utf-8").strip().split("\n")
     rng.shuffle(ling_rows)
     subsets["lingcoder"] = [json.loads(line) for line in ling_rows[: CAPS["lingcoder"]]]
     logging.info("lingcoder: kept %d rows", len(subsets["lingcoder"]))

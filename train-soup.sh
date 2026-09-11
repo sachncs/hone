@@ -40,6 +40,45 @@ LOG_DIR="artifacts/logs"
 mkdir -p "$LOG_DIR"
 ts="$(date +%Y%m%d-%H%M%S)"
 
+# Auto-generate a 40-row CodeX smoke fixture when missing so the
+# `smoke` action is self-contained on a fresh clone. The fixture is
+# intentionally tiny: enough to validate the prepare → train → adapter
+# pipeline without paying for a real HF download on every run.
+SMOKE_DATA="data/soup/codex/smoke-train-small.jsonl"
+ensure_smoke_fixture() {
+    if [[ -f "$SMOKE_DATA" ]]; then
+        return 0
+    fi
+    echo "==> smoke fixture missing; generating 40 rows from CodeX (one-shot)"
+    mkdir -p "$(dirname "$SMOKE_DATA")"
+    if ! uv run python - <<'PY' 2>&1 | tee -a "$LOG_DIR/smoke-fixture-$ts.log"
+import json, logging, sys
+from pathlib import Path
+sys.path.insert(0, ".")
+from hone.prepare import PrepareRequest, prepare_stream
+logging.basicConfig(level=logging.INFO)
+out = Path("data/soup/codex")
+out.mkdir(parents=True, exist_ok=True)
+request = PrepareRequest(output=out, seed=42)
+prepare_stream(
+    request=request,
+    repo="Modotte/CodeX-7M-Non-Thinking",
+    configs="default",
+    mode="sft",
+    max_samples=40,
+)
+src = out / "all.jsonl"
+dst = Path("data/soup/codex/smoke-train-small.jsonl")
+rows = src.read_text(encoding="utf-8").strip().splitlines()
+dst.write_text("\n".join(rows) + "\n", encoding="utf-8")
+print(f"wrote {len(rows)} smoke rows to {dst}")
+PY
+        then
+            echo "ERROR: smoke fixture generation failed; check $LOG_DIR/smoke-fixture-$ts.log" >&2
+            return 1
+        fi
+}
+
 # Soup needs a HF token for higher rate limits (the smoke run warned about
 # this). Export if available; otherwise Soup will still work, just slower.
 if [[ -z "${HF_TOKEN:-}" && -f ~/.cache/huggingface/token ]]; then
@@ -48,6 +87,7 @@ fi
 
 case "$ACTION" in
     smoke)
+        ensure_smoke_fixture
         echo "==> Soup MLX smoke (MiniCPM5-1B-MLX, ~32 iters on data/soup/codex/smoke-train-small.jsonl)"
         uv run soup train --config "$SOUP_CONFIG_SMOKE" --yes \
             2>&1 | tee "$LOG_DIR/soup-smoke-$ts.log"
@@ -56,6 +96,21 @@ case "$ACTION" in
         echo "    validate with: ./train-soup.sh gen 'Write a Python hello world'"
         ;;
     smoke-ling)
+        if [[ ! -f data/soup/lingcoder/train.jsonl ]]; then
+            echo "==> Ling-Coder fixture missing; generating"
+            mkdir -p data/soup/lingcoder
+            uv run python - <<'PY' 2>&1 | tee -a "$LOG_DIR/smoke-ling-fixture-$ts.log"
+import logging, sys
+from pathlib import Path
+sys.path.insert(0, ".")
+from hone.prepare import PrepareRequest, prepare_ling_coder
+logging.basicConfig(level=logging.INFO)
+prepare_ling_coder(
+    request=PrepareRequest(output=Path("data/soup/lingcoder"), seed=42),
+    max_samples=50,
+)
+PY
+        fi
         echo "==> Soup MLX Ling-Coder smoke (50 iters on data/soup/lingcoder/train.jsonl)"
         uv run soup train --config "$SOUP_CONFIG_SMOKE_LING" --yes \
             2>&1 | tee "$LOG_DIR/soup-smoke-ling-$ts.log"

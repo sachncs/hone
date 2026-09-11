@@ -61,8 +61,9 @@ if [[ "${HONE_SKIP_SOUP_SMOKE:-0}" != "1" && "${HONE_SKIP_SOUP:-0}" != "1" ]]; t
         echo "==> Soup MLX smoke (configs/soup-sft-codex-smoke.yaml)"
         bash train-soup.sh smoke
     else
-        echo "==> Soup MLX smoke skipped (data/full/codex/train.jsonl not found)"
-        echo "    See docs/SOTA-EXPECTATIONS.md for the data prep workflow."
+        echo "==> Soup MLX smoke: data/full/codex/train.jsonl not found;"
+        echo "    train-soup.sh smoke auto-generates a 40-row fixture on demand."
+        bash train-soup.sh smoke
     fi
 fi
 
