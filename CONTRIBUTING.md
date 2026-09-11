@@ -52,7 +52,7 @@ uv run pytest
 
 ## Release process
 
-1. Bump `version` in `pyproject.toml` and `hone/__init__.py`.
+1. Bump `version` in `pyproject.toml` (the only source of truth — `hone/__init__.py` no longer exists).
 2. Add a `CHANGELOG.md` entry.
 3. Tag the commit: `git tag -s v0.X.0`.
 4. Push the tag: `git push origin v0.X.0`.
