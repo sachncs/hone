@@ -2,36 +2,45 @@
 
 ## Development setup
 
+The prepare library is platform-independent (Apple Silicon is
+*not* required). The Soup driver + the `bench/` MLX harness do
+require Apple Silicon; install those extras only on a Mac.
+
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install -e '.[dev,mlx]'
+uv pip install -e '.[dev]'
 ```
 
-Apple Silicon is required for the MLX extras. On other platforms,
-omit `[mlx]`.
+To install the Soup driver (Apple Silicon only):
+
+```bash
+uv pip install "soup-cli[mlx]==0.73.2" "transformers>=4.57,<5" "huggingface-hub<1.0,>=0.34"
+```
+
+The same pins are used by `setup.sh` so the two install paths
+converge on the same dependency state.
 
 ## Quality gates
 
-Run all four before every commit:
-
-```bash
-uv run pytest -m "not mlx"
-uv run ruff check hone tests
-uv run ruff format --check hone tests
-uv run mypy hone tests
-```
-
-Run the full MLX suite on Apple Silicon:
+Run all four before every commit (mirrors `.github/workflows/ci.yml`):
 
 ```bash
 uv run pytest
+uv run ruff check bench hone tests
+uv run ruff format --check bench hone tests
+uv run mypy bench hone tests
 ```
+
+The `pytest -m "not mlx"` selector from the 0.2.x days no longer
+exists: no test in `tests/` carries a `pytest.mark.mlx` marker, so
+the unqualified `pytest` command is the one CI runs.
 
 ## Commit hygiene
 
 - One commit per atomic change.
-- Commit message starts with the todo ID: `T1.1: delete scripts/`.
+- Commit message starts with `fix:`, `feat:`, `docs:`, `refactor:`,
+  `test:`, or `style:` (Conventional Commits).
 - Commit body briefly explains what changed and why.
 - Each commit leaves the tree in a coherent state (no broken
   intermediate states).
@@ -56,3 +65,6 @@ uv run pytest
 2. Add a `CHANGELOG.md` entry.
 3. Tag the commit: `git tag -s v0.X.0`.
 4. Push the tag: `git push origin v0.X.0`.
+5. Draft a GitHub Release with the CHANGELOG entry as the body
+   (`gh release create v0.X.0 --notes-file CHANGELOG.md`).
+   Publishing the release makes `pip install hone==0.X.0` reproducible.
