@@ -35,10 +35,13 @@ uv pip install -e '.[dev]'
 
 if [[ "${HONE_SKIP_SOUP:-0}" != "1" ]]; then
     echo "==> installing soup-cli[mlx] for the Soup driver"
-    # Three pinned constraints (verified to coexist):
+    # Three pinned constraints (verified to coexist on M3 Pro 18 GB):
     #   * soup-cli==0.73.2 — current MLX-smoke-tested release
-    #   * transformers 4.57 — Soup needs <5; mlx-lm 0.29/0.31 wants 4.57
-    #   * huggingface-hub<1.0 — Soup's MLX trainer import-check requires it
+    #   * transformers>=4.57,<5 — mlx-lm 0.29 transitively requires 4.57
+    #     and Soup refuses >=5; the upper bound is the Soup-imposed cap
+    #   * huggingface-hub<1.0,>=0.34 — Soup's MLX trainer import-check
+    # The same pins are documented in README.md Quick Start so the
+    # README and setup.sh converge on the same dependency state.
     uv pip install \
         "soup-cli[mlx]==0.73.2" \
         "transformers>=4.57,<5" \
