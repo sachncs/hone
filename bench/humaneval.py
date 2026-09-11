@@ -14,11 +14,9 @@ decoding (temp=0); pass@10 uses temp=0.8 with 10 samples.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 from bench.model import GenerationParams, MlxCoder
 from bench.sandbox import TestOutcome, aggregate, evaluate
@@ -166,5 +164,3 @@ def run_humaneval(
 
 
 __all__ = ["HumanEvalProblem", "HumanEvalRun", "load_problems", "run_humaneval"]
-# Allow the loader to be a path-based CLI later.
-_ = (os, Path)
