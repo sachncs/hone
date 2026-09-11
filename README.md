@@ -50,8 +50,14 @@ git clone https://github.com/sachncs/hone.git
 cd hone
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install -e '.[dev,soup]'
+uv pip install -e '.[dev]'
+# Soup driver (Apple Silicon only) — same pins as setup.sh:
+uv pip install "soup-cli[mlx]==0.73.2" "transformers>=4.57,<5" "huggingface-hub<1.0,>=0.34"
 ```
+
+The three Soup pins mirror the install `setup.sh` validates on
+the M3 Pro 18 GB. Omit the second line on non-Apple platforms —
+the prepare library itself has no MLX deps.
 
 `setup.sh` automates this and runs the Soup smoke against an
 existing `data/full/codex/train.jsonl`:
