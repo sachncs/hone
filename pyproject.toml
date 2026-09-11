@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sachncs/hone"
+Homepage = "https://sachncs.github.io/hone/"
 Repository = "https://github.com/sachncs/hone"
 Issues = "https://github.com/sachncs/hone/issues"
 
