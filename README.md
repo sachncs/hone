@@ -70,6 +70,8 @@ Pick the function that matches your source data:
 | HF competitive-programming corpus | `hone.prepare.prepare_reservoir_sample` |
 | HF SWE-bench | `hone.prepare.prepare_swe` |
 | Any HF dataset (chat or codeforces-text) | `hone.prepare.prepare_stream` |
+| Ling-Coder SFT | `hone.prepare.prepare_ling_coder` |
+| Nemotron SFT (Competitive-Programming + SWE) | `hone.prepare.prepare_nemotron` |
 | LiveCodeBench prompts (for eval) | `hone.prepare.prepare_eval_prompts` |
 
 Example — stream CodeX, drop rows over 4096 tokens, write
@@ -126,6 +128,8 @@ from hone.prepare import (
     prepare_reservoir_sample,  # uniform-random sample of an HF stream
     prepare_swe,           # SWE-bench -> patch-completion JSONL
     prepare_stream,        # full HF config -> chat or text records
+    prepare_ling_coder,    # stream inclusionAI/Ling-Coder-SFT
+    prepare_nemotron,      # Nemotron SFT (CP + SWE) via direct jsonl
     prepare_eval_prompts,  # LiveCodeBench prompt dump
 
     PrepareRequest,        # common knobs (output, seed, logger)
@@ -134,6 +138,18 @@ from hone.prepare import (
     PrepareError, DataError, ValidationError,  # exception hierarchy
     Role,                  # chat-role enum
 )
+```
+
+The `bench/` package exposes the MLX benchmark harness:
+
+```python
+from bench import (
+    BenchmarkReport,       # dataclass combining HumanEval + MBPP
+    format_report,         # markdown renderer for BenchmarkReport
+    run_humaneval,         # HumanEval pass@1 + optional pass@10
+    run_mbpp,              # MBPP pass@1
+)
+from bench.model import MlxCoder, GenerationParams
 ```
 
 ## How good will the model be?
@@ -150,6 +166,34 @@ coding SFT** that:
   cannot,
 - composes cleanly with `soup ship` for regression detection
   and `mlx_lm fuse` for deployment.
+
+## Benchmarks
+
+The numbers in the next section come from `bench/`, an MLX-native
+harness for HumanEval and MBPP. Run it from the repo root with
+`python -m bench`:
+
+```bash
+# Smoke test — HumanEval only, 5 problems.
+uv run --extra dev --extra soup python -m bench \
+    --model openbmb/MiniCPM5-1B-MLX \
+    --benchmarks humaneval \
+    --limit 5 \
+    --output results/smoke.json
+
+# Full HumanEval + MBPP, with pass@10.
+uv run --extra dev python -m bench \
+    --model openbmb/MiniCPM5-1B-MLX \
+    --benchmarks humaneval,mbpp \
+    --pass-at-10 \
+    --output results/full.json
+```
+
+Reports go to stdout as Markdown; the optional `--output` file
+gets the structured JSON. See
+[`docs/ABLATION-REPORT.md`](docs/ABLATION-REPORT.md) for the
+full ablation table and the exact reproducibility recipe used
+for the headline numbers.
 
 ## Configuration
 
@@ -185,10 +229,18 @@ hone/
 │       ├── reservoir.py        # Vitter-style uniform sampler
 │       ├── token_filter.py     # tokenizer-based length filter
 │       └── hf.py               # HubStream / load_split
+├── bench/                      # MLX-native benchmark harness
+│   ├── __main__.py             # python -m bench driver
+│   ├── model.py                # MlxCoder wrapper
+│   ├── humaneval.py            # HumanEval pass@1 / pass@10
+│   ├── mbpp.py                 # MBPP pass@1
+│   ├── sandbox.py              # subprocess sandbox (timeout + rlimits)
+│   └── report.py               # BenchmarkReport + JSON output
 ├── archive/
 │   └── hone_mlx/               # frozen MLX / Unsloth driver
 ├── tests/
-│   └── test_prepare.py         # end-to-end tests for the prepare layer
+│   ├── test_prepare.py         # end-to-end tests for the prepare layer
+│   └── test_bench.py           # sandbox + MlxCoder mocks
 ├── configs/
 │   ├── soup-sft-codex-smoke.yaml
 │   └── soup-sft-codex-full.yaml
