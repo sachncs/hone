@@ -1,0 +1,35 @@
+name: Question
+description: Ask a question about hone or the Soup driver
+title: "[question] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want to know?
+      description: A clear one-paragraph question.
+      placeholder: How does prepare_stream decide which config rows to keep?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you already tried?
+      description: Links to docs / source / experiments are all welcome.
+      placeholder: |
+        - Read hone.prepare.service.prepare_stream
+        - Ran `prepare_stream(... max_tokens=4096 ...)` on Modotte/CodeX-7M-Non-Thinking
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - OS:
+        - Language/runtime version:
+        - Project version:
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
