@@ -24,8 +24,7 @@ from bench.sandbox import TestOutcome, aggregate, evaluate
 log = logging.getLogger(__name__)
 
 HUMANEVAL_PROMPT_TEMPLATE = (
-    "Complete the following Python function. Return only the function body.\n\n"
-    "{prompt}"
+    "Complete the following Python function. Return only the function body.\n\n{prompt}"
 )
 
 
@@ -122,11 +121,12 @@ def run_humaneval(
     if pass_at_10:
         log.info("HumanEval pass@10: %d problems x 10 samples", len(prompts))
         ten_samples = model.generate(
-            prompts, GenerationParams(max_tokens=max_tokens, temperature=0.8, n_samples=10)
+            prompts,
+            GenerationParams(max_tokens=max_tokens, temperature=0.8, n_samples=10),
         )
 
     outcomes: list[TestOutcome] = []
-    for problem, completions in zip(problems, one_samples):
+    for problem, completions in zip(problems, one_samples, strict=True):
         candidate = _wrap_completion(problem.prompt, completions[0])
         outcome = evaluate(candidate, problem.test, timeout=timeout)
         outcomes.append(outcome)
@@ -136,7 +136,7 @@ def run_humaneval(
     pass_at_10_score: float | None = None
     if ten_samples is not None:
         ten_pass: list[bool] = []
-        for problem, samples in zip(problems, ten_samples):
+        for problem, samples in zip(problems, ten_samples, strict=True):
             any_pass = False
             for completion in samples:
                 candidate = _wrap_completion(problem.prompt, completion)

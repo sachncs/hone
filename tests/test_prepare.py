@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -167,10 +168,12 @@ def test_prepare_stream_writes_all_configs(
         def __init__(self, rows: list[dict]) -> None:
             self._rows = rows
 
-        def __iter__(self):
+        def __iter__(self) -> Iterator[dict[str, object]]:
             return iter(self._rows)
 
-    def _factory(repo, *, config=None, split="train"):
+    def _factory(
+        repo: str, *, config: str | None = None, split: str = "train"
+    ) -> _FakeStream:
         cfg = config or "default"
         return _FakeStream(
             [
@@ -207,7 +210,7 @@ def test_nemotron_normalizer_strips_reasoning_content() -> None:
     """The reasoning trace should not leak into the chat template."""
     from hone.prepare.nemotron import _validate_messages
 
-    row = {
+    row: dict[str, object] = {
         "messages": [
             {"role": "user", "content": "Q"},
             {
@@ -231,9 +234,7 @@ def test_nemotron_normalizer_rejects_empty_messages() -> None:
     from hone.prepare.nemotron import _validate_messages
 
     assert _validate_messages({"messages": []}) is None
-    assert (
-        _validate_messages({"messages": [{"role": "user", "content": "  "}]}) is None
-    )
+    assert _validate_messages({"messages": [{"role": "user", "content": "  "}]}) is None
     assert _validate_messages({"messages": "not a list"}) is None
 
 

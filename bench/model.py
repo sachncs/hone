@@ -38,10 +38,10 @@ class MlxCoder:
     ) -> None:
         from mlx_lm import load
 
-        log.info(
-            "loading model=%s adapter=%s", model_id, adapter_path or "(none)"
+        log.info("loading model=%s adapter=%s", model_id, adapter_path or "(none)")
+        loaded = load(
+            model_id, adapter_path=str(adapter_path) if adapter_path else None
         )
-        loaded = load(model_id, adapter_path=str(adapter_path) if adapter_path else None)
         # mlx_lm.load returns (model, tokenizer) in v0.29/0.31
         self._model, self._tokenizer = loaded[0], loaded[1]
         self._model_id = model_id
