@@ -73,7 +73,7 @@ Pick the function that matches your source data:
 | LiveCodeBench prompts (for eval) | `hone.prepare.prepare_eval_prompts` |
 
 Example — stream CodeX, drop rows over 4096 tokens, write
-`train.jsonl` + `valid.jsonl`:
+`all.jsonl` under the directory:
 
 ```python
 from pathlib import Path
@@ -81,7 +81,7 @@ import logging
 from hone.prepare import prepare_stream, PrepareRequest
 
 logging.basicConfig(level=logging.INFO)
-request = PrepareRequest(output=Path("data/full/codex/train.jsonl"), seed=42)
+request = PrepareRequest(output=Path("data/full/codex"), seed=42)
 prepare_stream(
     request=request,
     repo="Modotte/CodeX-7M-Non-Thinking",
@@ -158,7 +158,7 @@ The prepare service takes:
 
 | Argument | Effect |
 |---|---|
-| `output` | Path to write `train.jsonl` (+ `valid.jsonl`) |
+| `output` | Directory to write `train.jsonl` (+ `valid.jsonl`); created if missing |
 | `seed` | RNG seed for splits and reservoir sampling |
 | `ratio` | Validation split ratio (exclusive 0..1) |
 | `max_tokens` | Drop rows whose token count exceeds this; `0` disables |

@@ -76,7 +76,12 @@ class PrepareResult:
 
 @dataclass(frozen=True)
 class PrepareRequest:
-    """Common knobs every prepare entry point accepts."""
+    """Common knobs every prepare entry point accepts.
+
+    ``output`` is treated as a directory: every entry point writes
+    ``train.jsonl`` and (where applicable) ``valid.jsonl`` under
+    it. The directory is created if missing.
+    """
 
     output: Path
     seed: int = 42
@@ -432,11 +437,12 @@ def prepare_stream(
     tokenizer = load_tokenizer(tokenizer_model) if max_tokens > 0 else None
     filter_ = TokenFilter(max_tokens=max_tokens, tokenizer=tokenizer)
 
-    request.output.parent.mkdir(parents=True, exist_ok=True)
+    request.output.mkdir(parents=True, exist_ok=True)
+    output_path = request.output / "all.jsonl"
     written = skipped = filtered_long = 0
     started = time.monotonic()
     last_log = started
-    with request.output.open("w", encoding="utf-8") as handle:
+    with output_path.open("w", encoding="utf-8") as handle:
         for config in _iter_configs(configs):
             stream = HubStream(repo, config=config, split=split)
             for row in stream:
@@ -474,16 +480,15 @@ def prepare_stream(
                         elapsed,
                     )
                     last_log = time.monotonic()
-            else:
-                continue
-            break
+            if max_samples > 0 and written >= max_samples:
+                break
     elapsed = time.monotonic() - started
     request.logger.info(
         "complete: written=%d skipped=%d filtered_long=%d output=%s elapsed=%.1fs",
         written,
         skipped,
         filtered_long,
-        request.output,
+        output_path,
         elapsed,
     )
     return PrepareResult(

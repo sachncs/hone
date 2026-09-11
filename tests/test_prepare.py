@@ -147,6 +147,58 @@ def test_prepare_error_is_base_of_data_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# prepare_stream multi-config
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_stream_writes_all_configs(
+    tmp_path: Path, req: PrepareRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """prepare_stream must drain every config, not just the first.
+
+    Regression: the old `for ... else: continue; break` pattern
+    broke the outer loop after a single config. With two synthetic
+    iterables both should land in the same all.jsonl.
+    """
+    from hone.prepare import prepare_stream
+    from hone.prepare import service as service_mod
+
+    class _FakeStream:
+        def __init__(self, rows: list[dict]) -> None:
+            self._rows = rows
+
+        def __iter__(self):
+            return iter(self._rows)
+
+    def _factory(repo, *, config=None, split="train"):
+        cfg = config or "default"
+        return _FakeStream(
+            [
+                {
+                    "messages": [
+                        {"role": "user", "content": f"{cfg}-Q"},
+                        {"role": "assistant", "content": f"{cfg}-A"},
+                    ]
+                }
+            ]
+        )
+
+    monkeypatch.setattr(service_mod, "HubStream", _factory)
+    prepare_stream(
+        request=req,
+        repo="ignored",
+        configs=["alpha", "beta"],
+        max_tokens=0,
+        max_samples=0,
+    )
+
+    rows = (req.output / "all.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(rows) == 2
+    contents = sorted(json.loads(row)["messages"][0]["content"] for row in rows)
+    assert contents == ["alpha-Q", "beta-Q"]
+
+
+# ---------------------------------------------------------------------------
 # Nemotron row normalizer
 # ---------------------------------------------------------------------------
 
