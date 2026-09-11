@@ -56,6 +56,14 @@ def test_sandbox_aggregate_computes_pass_rate() -> None:
     assert summary["timed_out"] == 1
 
 
+def test_sandbox_rejects_memory_hog() -> None:
+    """A candidate that allocates a huge list is killed by RLIMIT_AS."""
+    candidate = "a = []\nwhile True: a.append(' ' * (10**7))"
+    outcome = evaluate(candidate, "assert True", timeout=5.0)
+    assert outcome.passed is False
+    assert outcome.stderr != "" or outcome.timed_out is True
+
+
 # ---------------------------------------------------------------------------
 # HumanEval prompt wrapping
 # ---------------------------------------------------------------------------

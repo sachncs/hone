@@ -10,6 +10,7 @@ with no exception, no stderr noise, and exit code 0.
 
 from __future__ import annotations
 
+import resource
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TIMEOUT_SECONDS: float = 5.0
+MEMORY_LIMIT_BYTES: int = 512 * 1024 * 1024
+CPU_SECONDS: int = 10
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,12 @@ def evaluate(
     The script is written to a temp file and invoked with the same
     Python interpreter the harness is running under, so any
     user-installed packages the candidate imports are available.
+
+    A preexec_fn clamps CPU seconds, address-space bytes, and the
+    child-process count so a candidate that allocates a huge list,
+    forks, or runs an infinite loop is killed before it escapes
+    the harness's UID. The wall-clock timeout still backs the
+    budget in case the rlimits are no-ops on the host platform.
     """
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -64,6 +73,7 @@ def evaluate(
             text=True,
             timeout=timeout,
             check=False,
+            preexec_fn=_limit_resources,
         )
     except subprocess.TimeoutExpired:
         return TestOutcome(passed=False, stderr="<timeout>", timed_out=True)
@@ -72,6 +82,17 @@ def evaluate(
     if completed.returncode != 0:
         return TestOutcome(passed=False, stderr=completed.stderr, timed_out=False)
     return TestOutcome(passed=True, stderr="", timed_out=False)
+
+
+def _limit_resources() -> None:
+    """Apply per-process rlimits before exec of the candidate script."""
+    try:
+        resource.setrlimit(resource.RLIMIT_CPU, (CPU_SECONDS, CPU_SECONDS))
+        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
+        resource.setrlimit(resource.RLIMIT_NPROC, (1, 1))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (1 << 20, 1 << 20))
+    except (ValueError, OSError):
+        pass
 
 
 def aggregate(outcomes: list[TestOutcome]) -> dict[str, int | float]:
@@ -87,4 +108,11 @@ def aggregate(outcomes: list[TestOutcome]) -> dict[str, int | float]:
     }
 
 
-__all__ = ["TIMEOUT_SECONDS", "TestOutcome", "aggregate", "evaluate"]
+__all__ = [
+    "CPU_SECONDS",
+    "MEMORY_LIMIT_BYTES",
+    "TIMEOUT_SECONDS",
+    "TestOutcome",
+    "aggregate",
+    "evaluate",
+]
