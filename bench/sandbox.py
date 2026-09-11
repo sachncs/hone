@@ -10,7 +10,6 @@ with no exception, no stderr noise, and exit code 0.
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import tempfile
@@ -89,7 +88,3 @@ def aggregate(outcomes: list[TestOutcome]) -> dict[str, int | float]:
 
 
 __all__ = ["TestOutcome", "TIMEOUT_SECONDS", "aggregate", "evaluate"]
-
-
-# Re-export json for callers that want pretty-printing.
-_ = json
