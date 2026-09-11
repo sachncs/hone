@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">hone</h1>
-  <p align="center">JSONL data preparation for Soup fine-tuning — one config, one command.</p>
+  <p align="center">JSONL data preparation for Soup-driven fine-tuning on Apple Silicon.</p>
   <p align="center">
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.12%7C3.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
