@@ -55,10 +55,21 @@ def _record_text(record: Mapping[str, Any]) -> str:
 def load_tokenizer(model_id: str, *, trust_remote_code: bool = True) -> TokenizerLike:
     """Lazy-load the tokenizer used by the length filter.
 
-    Imported here so unit tests that don't want MLX deps can still
-    run the rest of the package.
+    Uses ``transformers.AutoTokenizer`` (already a transitive
+    dependency via ``huggingface-hub``) so the prepare layer has
+    no MLX dependency of its own. Raises :class:`PrepareError`
+    with an actionable message if the install is missing
+    ``transformers``.
     """
-    from mlx_lm.tokenizer_utils import AutoTokenizer
+    try:
+        from transformers import AutoTokenizer
+    except ImportError as error:
+        from hone.prepare.service import DataError
+
+        raise DataError(
+            "transformers is required for token-length filtering; "
+            "install with `uv pip install '.[dev]'` or pass max_tokens=0"
+        ) from error
 
     tokenizer: TokenizerLike = AutoTokenizer.from_pretrained(
         model_id, trust_remote_code=trust_remote_code
