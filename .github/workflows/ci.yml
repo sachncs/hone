@@ -17,13 +17,40 @@ jobs:
           version: latest
       - name: Set up Python
         run: uv python install 3.12
-      - name: Install development and MLX dependencies
-        run: uv sync --extra dev --extra mlx
-      - name: Run tests (full suite including mlx)
+      - name: Install development + soup extras
+        run: uv sync --extra dev --extra soup
+      - name: Install MLX stack for the Soup trainer smoke
+        run: |
+          uv pip install \
+            "soup-cli[mlx]==0.73.2" \
+            "transformers>=4.57,<5" \
+            "huggingface-hub<1.0,>=0.34"
+      - name: Run tests (full suite)
         run: uv run pytest
       - name: Check formatting
-        run: uv run ruff format --check hone tests
+        run: uv run ruff format --check bench hone tests
       - name: Run lint
-        run: uv run ruff check hone tests
+        run: uv run ruff check bench hone tests
       - name: Run type checking
-        run: uv run mypy hone tests
+        run: uv run mypy bench hone tests
+
+  linux:
+    name: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install development dependencies
+        run: uv sync --extra dev
+      - name: Run prepare-layer tests
+        run: uv run pytest tests/test_prepare.py
+      - name: Check formatting
+        run: uv run ruff format --check bench hone tests
+      - name: Run lint
+        run: uv run ruff check bench hone tests
+      - name: Run type checking
+        run: uv run mypy bench hone tests
