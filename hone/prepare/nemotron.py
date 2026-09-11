@@ -66,13 +66,13 @@ def _download(repo_id: str, filename: str, *, cache_dir: Path) -> Path:
     )
 
 
-def _maybe_drop_truncated(row: dict[str, object]) -> dict[str, object] | None:
-    """Drop a row if any message is marked truncated, else strip reasoning_content.
+def _validate_messages(row: dict[str, object]) -> dict[str, object] | None:
+    """Validate a Nemotron row; return a chat-format dict or ``None``.
 
-    Soup's chat template doesn't have a slot for the chain-of-
-    thought; we keep the model's final answer (content) only and
-    surface the reasoning trace as ``metadata["reasoning_preview"]``
-    so future eval can decide whether to fold it back in.
+    Soup's chat template doesn't have a slot for chain-of-thought,
+    so the ``reasoning_content`` field is silently dropped. The
+    returned record carries only ``messages`` (role + content per
+    turn); no ``metadata`` is preserved.
     """
     messages = row.get("messages")
     if not isinstance(messages, list):
@@ -114,7 +114,7 @@ def stream_nemotron(
     """Stream + filter + reservoir-sample up to ``max_rows`` from a Nemotron repo.
 
     Reads each file once, normalizes every row through
-    :func:`_maybe_drop_truncated`, drops rows whose combined
+    :func:`_validate_messages`, drops rows whose combined
     message length exceeds ``config.max_chars``, and yields the
     survivor. Sampling is a deterministic uniform pass with
     random seed so two calls with the same seed produce the same
@@ -142,7 +142,7 @@ def stream_nemotron(
             log.warning("skipping %s/%s: %s", config.repo_id, filename, error)
             continue
         for raw in _stream_jsonl(path):
-            cleaned = _maybe_drop_truncated(raw)
+            cleaned = _validate_messages(raw)
             if cleaned is None:
                 continue
             messages_obj: object = cleaned["messages"]
