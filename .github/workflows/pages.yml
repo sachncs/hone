@@ -40,7 +40,7 @@ jobs:
         working-directory: site
 
       - name: Type check
-        run: npx tsc -b --noEmit
+        run: npx tsc -p tsconfig.app.json --noEmit
         working-directory: site
 
       - name: Lint
