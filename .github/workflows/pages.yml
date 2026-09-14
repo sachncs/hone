@@ -39,14 +39,6 @@ jobs:
         run: npm ci
         working-directory: site
 
-      - name: Sanity check
-        run: |
-          echo "PWD: $(pwd)"
-          echo "src tree:"
-          find src -maxdepth 3 -type f | sort
-          echo "tsc:"
-          npx tsc --version
-
       - name: Type check
         run: npx tsc -p tsconfig.app.json --noEmit
         working-directory: site

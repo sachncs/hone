@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Copy, Check, Terminal } from "lucide-react";
 import { useState } from "react";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
 
 const TYPED_LINES: { type: "comment" | "import" | "code" | "blank"; text: string }[] = [
   { type: "comment", text: "# prepare a Soup-ready JSONL from CodeX" },

@@ -2,7 +2,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import { Menu, X, Github, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { label: "Product", href: "#product" },
