@@ -65,3 +65,11 @@ results/
 
 # Internal contributor guide (regenerated per-developer from a template)
 AGENTS.md
+
+# Site (Vite + React)
+site/node_modules/
+site/dist/
+site/.vite/
+site/*.tsbuildinfo
+site/.env
+site/.env.local

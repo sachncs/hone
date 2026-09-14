@@ -5,6 +5,7 @@
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.12%7C3.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
     <a href="https://github.com/sachncs/hone/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/hone/ci.yml?branch=main" alt="CI"></a>
+    <a href="https://sachncs.github.io/hone/"><img src="https://img.shields.io/badge/site-sachncs.github.io%2Fhone-blue" alt="Site"></a>
     <a href="#installation"><img src="https://img.shields.io/badge/hone-0.3.0-blue" alt="Version"></a>
     <a href="https://github.com/sachncs/hone/stargazers"><img src="https://img.shields.io/github/stars/sachncs/hone" alt="Stars"></a>
   </p>
